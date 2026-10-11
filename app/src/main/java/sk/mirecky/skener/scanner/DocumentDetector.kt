@@ -33,6 +33,8 @@ data class DetectionCriteria(
     val minSideContrast: Double,
     /** Či musí byť vnútro svetlejšie než okolie (papier); pri tabuli stačí absolútny rozdiel. */
     val insideBrighter: Boolean,
+    /** Uprednostniť kandidátov s pomerom strán A4. */
+    val preferA4: Boolean,
     /** Minimálny priemerný jas vnútri (papier je svetlý); 0 = nekontroluje sa. */
     val minInsideBrightness: Double,
 ) {
@@ -41,13 +43,13 @@ data class DetectionCriteria(
             ScanMode.DOCUMENT -> DetectionCriteria(
                 minArea = 0.15, maxArea = 0.97, maxSideRatio = 2.0,
                 minAngle = 50.0, maxAngle = 130.0,
-                minSideContrast = 12.0, insideBrighter = true,
+                minSideContrast = 12.0, insideBrighter = true, preferA4 = true,
                 minInsideBrightness = 115.0,
             )
             ScanMode.WHITEBOARD -> DetectionCriteria(
                 minArea = 0.20, maxArea = 0.98, maxSideRatio = 3.0,
                 minAngle = 45.0, maxAngle = 135.0,
-                minSideContrast = 10.0, insideBrighter = false,
+                minSideContrast = 10.0, insideBrighter = false, preferA4 = false,
                 minInsideBrightness = 80.0,
             )
         }
@@ -102,7 +104,13 @@ class DocumentDetector {
         for (contour in candidates) {
             val quad = toQuad(contour, w, h, criteria) ?: continue
             val detection = evaluate(quad, gray, w, h, criteria) ?: continue
-            val score = detection.areaFraction * minOf(detection.contrast, 60.0)
+            // Pri dokumente majú prednosť tvary s pomerom strán blízkym A4.
+            val ratioPenalty = if (criteria.preferA4) {
+                1.0 - minOf(kotlin.math.abs(quad.sideRatio(w / h) - ImageOps.A4_RATIO) / ImageOps.A4_RATIO, 0.5)
+            } else {
+                1.0
+            }
+            val score = detection.areaFraction * minOf(detection.contrast, 60.0) * ratioPenalty
             if (score > bestScore) {
                 bestScore = score
                 best = detection

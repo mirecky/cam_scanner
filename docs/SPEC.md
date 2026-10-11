@@ -51,7 +51,7 @@ Kandidát na dokument sa akceptuje, len ak spĺňa všetky tieto podmienky:
 - plocha v stanovenom rozsahu podielu záberu (predbežne 20–98 %),
 - pomer strán po korekcii perspektívy zodpovedajúci režimu (pre A4 približne 1 : 1,414 s toleranciou),
 - vnútorné uhly v prijateľnom rozsahu (vylúčenie extrémne skosených tvarov),
-- dostatočný kontrast hrany voči pozadiu,
+- dostatočný kontrast hrany voči pozadiu: pozdĺž každej strany je vnútri svetlejšie než vonku (odolné voči vzorovaným podkladom),
 - dostatočná ostrosť obrazu (napr. rozptyl Laplaceovho operátora nad prahom).
 
 ### F3 – Automatické snímanie a rozpoznanie ďalšieho listu
@@ -83,6 +83,7 @@ SNÍMANIE ──(fotografia v plnom rozlíšení uložená)──► ČAKANIE_NA
 ### F4 – Úprava geometrie
 
 - Korekcia perspektívy na pravouhlý obraz.
+- V režime dokument sa výstup prispôsobí presne pomeru strán A4 (1 : 1,414), ak sa nameraný pomer od neho líši najviac o 15 %; pri výbere obrysu majú prednosť tvary blízke A4. Iné formáty si zachovajú nameraný pomer.
 - Ručná úprava štyroch rohov s lupou pri ťahaní.
 - Otočenie o 90°.
 

@@ -169,6 +169,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         saving = true
         setTransientStatus(ScanStatus.SAVING, resetAfterMs = null)
 
+        val mode = currentMode
         val pageFile = pageStore.newPageFile()
         val original = pageStore.originalFile(pageFile)
         controller.takePicture(
@@ -179,7 +180,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     _captureEvents.tryEmit(Unit)
                     viewModelScope.launch {
                         val ok = withContext(Dispatchers.Default) {
-                            runCatching { PageProcessor.process(original, pageFile, quad) }
+                            runCatching { PageProcessor.process(original, pageFile, quad, mode) }
                                 .onFailure { Log.e(TAG, "Spracovanie strany zlyhalo", it) }
                                 .isSuccess
                         }

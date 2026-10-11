@@ -66,18 +66,39 @@ object ImageOps {
         return data
     }
 
+    /** Pomer strán formátu A4 (dlhšia : kratšia). */
+    const val A4_RATIO = 1.41421356
+
     /**
      * Vyrovná dokument z obrazu [src] (ľubovoľný počet kanálov) podľa štvoruholníka [quad]
      * v normalizovaných súradniciach. Výstupné rozmery zodpovedajú dĺžkam strán štvoruholníka.
+     *
+     * Ak je zadaný [snapRatio] a nameraný pomer strán sa od neho líši najviac o [SNAP_TOLERANCE],
+     * výstup sa prispôsobí presne tomuto pomeru (napr. A4), čím sa odstráni skreslenie z perspektívy.
      */
-    fun cropDocument(src: Mat, quad: Quad): Mat {
+    fun cropDocument(src: Mat, quad: Quad, snapRatio: Double? = null): Mat {
         val w = src.cols().toDouble()
         val h = src.rows().toDouble()
         fun d(a: Pt, b: Pt) = hypot((a.x - b.x) * w, (a.y - b.y) * h)
-        val outW = max(d(quad.tl, quad.tr), d(quad.bl, quad.br)).roundToInt().coerceAtLeast(1)
-        val outH = max(d(quad.tl, quad.bl), d(quad.tr, quad.br)).roundToInt().coerceAtLeast(1)
-        return warp(src, quad, outW, outH, Imgproc.INTER_CUBIC)
+        var outW = max(d(quad.tl, quad.tr), d(quad.bl, quad.br))
+        var outH = max(d(quad.tl, quad.bl), d(quad.tr, quad.br))
+        if (snapRatio != null) {
+            val portrait = outH >= outW
+            val measured = if (portrait) outH / outW else outW / outH
+            if (kotlin.math.abs(measured - snapRatio) / snapRatio <= SNAP_TOLERANCE) {
+                // Zachová sa dlhšia strana, kratšia sa dopočíta.
+                if (portrait) outW = outH / snapRatio else outH = outW / snapRatio
+            }
+        }
+        return warp(
+            src, quad,
+            outW.roundToInt().coerceAtLeast(1), outH.roundToInt().coerceAtLeast(1),
+            Imgproc.INTER_CUBIC,
+        )
     }
+
+    /** Najväčšia relatívna odchýlka nameraného pomeru strán, pri ktorej sa ešte prispôsobí formátu. */
+    private const val SNAP_TOLERANCE = 0.15
 
     private fun warp(src: Mat, quad: Quad, outW: Int, outH: Int, interpolation: Int): Mat {
         val w = src.cols().toDouble()

@@ -8,6 +8,7 @@ import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import sk.mirecky.skener.scanner.ImageOps
 import sk.mirecky.skener.scanner.Quad
+import sk.mirecky.skener.scanner.ScanMode
 import java.io.File
 
 /** Spracovanie nasnímanej fotografie na stranu dokumentu (orezanie a vyrovnanie perspektívy, F4). */
@@ -17,10 +18,10 @@ object PageProcessor {
 
     /**
      * Zo súboru [original] vytvorí stranu [target]. Ak je známy obrys dokumentu [quad]
-     * (normalizované súradnice vzpriameného obrazu), dokument sa vyreže a vyrovná;
-     * inak sa použije celá fotografia.
+     * (normalizované súradnice vzpriameného obrazu), dokument sa vyreže a vyrovná
+     * (v režime dokument s prispôsobením na pomer A4, ak je mu blízky); inak sa použije celá fotografia.
      */
-    fun process(original: File, target: File, quad: Quad?) {
+    fun process(original: File, target: File, quad: Quad?, mode: ScanMode) {
         if (quad == null) {
             original.copyTo(target, overwrite = true)
             return
@@ -33,7 +34,8 @@ object PageProcessor {
         Utils.bitmapToMat(bitmap, rgba)
         bitmap.recycle()
 
-        val cropped = ImageOps.cropDocument(rgba, quad)
+        val snap = if (mode == ScanMode.DOCUMENT) ImageOps.A4_RATIO else null
+        val cropped = ImageOps.cropDocument(rgba, quad, snap)
         rgba.release()
         val bgr = Mat()
         Imgproc.cvtColor(cropped, bgr, Imgproc.COLOR_RGBA2BGR)
