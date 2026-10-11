@@ -1,0 +1,176 @@
+# Špecifikácia aplikácie Skener dokumentov
+
+Verzia dokumentu: 1.0 (návrh na schválenie)
+Dátum: 11. 10. 2026
+
+## 1. Účel a kontext
+
+Cieľom je vytvoriť natívnu aplikáciu pre Android na profesionálne skenovanie dokumentov fotoaparátom mobilného telefónu. Aplikácia je určená výhradne na osobné použitie jedného používateľa a nebude distribuovaná prostredníctvom Google Play.
+
+Primárny scenár použitia je postupné skenovanie väčšieho počtu listov formátu A4: používateľ prikladá listy pod telefón a aplikácia bez ďalšej interakcie rozpozná dokument, nasníma ho, upraví perspektívu a po výmene listu nasníma ďalšiu stranu. Výsledkom je jeden súbor PDF s vyhľadávateľnou textovou vrstvou.
+
+### 1.1 Východiská z analýzy existujúcich riešení
+
+| Riešenie | Silné stránky | Identifikované nedostatky |
+|---|---|---|
+| CamScanner | spoľahlivá detekcia hrán, kvalitné zvýraznenie textu | reklamy, vodoznak v bezplatnej verzii, OCR len v predplatnom, väzba na vlastný cloud, bezpečnostný incident reklamného SDK (2019), nadbytočné povolenia |
+| Adobe Scan | režimy podľa typu predlohy (dokument, tabuľa, kniha, karta), automatické snímanie, nástroje úprav po nasnímaní | nedostatočné overenie, či ide o dokument (falošné zábery ľubovoľnej scény), agresívne filtre |
+
+Z uvedeného vyplývajú tieto princípy návrhu:
+
+- plne offline spracovanie, žiadne reklamy, žiadna telemetria, žiadny cloud tretej strany,
+- minimálny rozsah povolení,
+- prísne overovanie kandidáta na dokument pred automatickým nasnímaním,
+- OCR ako štandardná súčasť, nie platená nadstavba.
+
+## 2. Cieľové prostredie
+
+| Parameter | Hodnota |
+|---|---|
+| Zariadenie | Samsung Galaxy S25 Ultra |
+| Operačný systém | Android 16 (One UI 8) |
+| `minSdk` / `targetSdk` | 36 / 36 |
+| Jazyk rozhrania | slovenčina, angličtina; výber podľa jazyka systému (záložne angličtina) |
+| Distribúcia | podpísaný APK zostavovaný cez GitHub Actions, inštalácia mimo obchodu |
+
+## 3. Rozsah fázy 1
+
+### F1 – Živá detekcia dokumentu
+
+- Analýza obrazu z kamery v reálnom čase (cieľ ≥ 15 snímok/s analýzy).
+- Zobrazenie obrysu nájdeného dokumentu nad náhľadom kamery.
+- Farebné rozlíšenie stavu obrysu: hľadanie, nestabilný, pripravený na snímanie.
+- Podporované predlohy: list papiera (primárne A4) a tabuľa.
+
+### F2 – Ochrana pred falošnými zábermi
+
+Kandidát na dokument sa akceptuje, len ak spĺňa všetky tieto podmienky:
+
+- konvexný štvoruholník,
+- plocha v stanovenom rozsahu podielu záberu (predbežne 20–98 %),
+- pomer strán po korekcii perspektívy zodpovedajúci režimu (pre A4 približne 1 : 1,414 s toleranciou),
+- vnútorné uhly v prijateľnom rozsahu (vylúčenie extrémne skosených tvarov),
+- dostatočný kontrast hrany voči pozadiu,
+- dostatočná ostrosť obrazu (napr. rozptyl Laplaceovho operátora nad prahom).
+
+### F3 – Automatické snímanie a rozpoznanie ďalšieho listu
+
+Funkcia je aktívna iba vtedy, keď ju používateľ zapne prepínacou ikonou.
+
+**Prepínač automatického snímania:**
+
+- umiestnený na spodnej ovládacej lište priamo vedľa spúšte (dosah palcom),
+- jednoznačne rozlíšené stavy zapnuté/vypnuté (ikona aj farba),
+- stav sa uchováva medzi spusteniami aplikácie,
+- ručná spúšť je dostupná vždy, aj pri zapnutom automatickom snímaní.
+
+**Stavový automat:**
+
+```
+HĽADANIE ──(platný kandidát)──► STABILIZÁCIA
+STABILIZÁCIA ──(stabilný ≥ T_stab, ostrý)──► SNÍMANIE
+STABILIZÁCIA ──(strata kandidáta / pohyb)──► HĽADANIE
+SNÍMANIE ──(fotografia v plnom rozlíšení uložená)──► ČAKANIE_NA_ZMENU
+ČAKANIE_NA_ZMENU ──(zistená zmena: pohyb v zábere alebo odlišný obsah)──► HĽADANIE
+```
+
+- `T_stab` predbežne 0,6 s (nastaviteľné).
+- Zmena listu sa vyhodnocuje kombináciou dvoch signálov: (a) detekcia pohybu v zábere (ruka, výmena listu), (b) porovnanie obsahu aktuálneho kandidáta s naposledy nasnímanou stranou (percepčný odtlačok obrazu po korekcii perspektívy).
+- Rovnaký list sa nesmie nasnímať dvakrát; nový list položený presne na miesto predchádzajúceho sa musí rozpoznať.
+- Používateľ dostáva stavovú spätnú väzbu: „Hľadám dokument“, „Drž“, „Nasnímané – polož ďalší list“, počet nasnímaných strán, krátka haptická odozva pri nasnímaní.
+
+### F4 – Úprava geometrie
+
+- Korekcia perspektívy na pravouhlý obraz.
+- Ručná úprava štyroch rohov s lupou pri ťahaní.
+- Otočenie o 90°.
+
+### F5 – Obrazové filtre
+
+| Filter | Určenie |
+|---|---|
+| Dokument (čiernobiely) | text, adaptívne prahovanie, odstránenie tieňov |
+| Dokument (odtiene šedej) | text s obrázkami, vyrovnanie pozadia |
+| Farebne vylepšený | farebné predlohy, vybielenie pozadia, zachovanie farieb |
+| Tabuľa | potlačenie odleskov a pozadia, zvýraznenie ťahov fixiek |
+| Originál | bez úprav, iba geometrická korekcia |
+
+Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť pre jednotlivú stranu aj pre celý dokument.
+
+### F6 – Správa strán
+
+- Náhľad všetkých strán rozpracovaného dokumentu.
+- Zmena poradia ťahaním, zmazanie, opätovné nasnímanie vybranej strany.
+- Pokračovanie v skenovaní do existujúceho rozpracovaného dokumentu.
+
+### F7 – OCR a vyhľadávateľné PDF
+
+- Plne offline rozpoznávanie textu pre slovenčinu a angličtinu.
+- Výstupom je PDF so stranou ako obrázkom a neviditeľnou textovou vrstvou umiestnenou podľa polôh slov (vyhľadávanie a kopírovanie textu v ľubovoľnom prehliadači PDF).
+- Spracovanie beží na pozadí; priebeh sa zobrazuje v notifikácii typu Live Update.
+- Výber OCR enginu sa rozhodne porovnaním (pozri kap. 6).
+
+### F8 – Export a ukladanie
+
+- Pri prvom spustení si používateľ vyberie cieľový priečinok (Storage Access Framework, trvalé oprávnenie k stromu priečinkov).
+- Hotové PDF sa ukladajú výlučne do tohto priečinka; tento priečinok možno synchronizovať aplikáciou MEGA (funkcia Sync).
+- Rozpracované dokumenty a medzivýsledky sa ukladajú v internom úložisku aplikácie a do synchronizovaného priečinka sa nedostávajú.
+- Predvolený názov súboru: `Sken_RRRR-MM-DD_HH-MM.pdf`, s možnosťou premenovania pred uložením.
+- Voľby exportu: veľkosť strany (A4 / podľa predlohy), kvalita obrazu (štandardná / vysoká).
+- Zdieľanie hotového PDF systémovým dialógom.
+
+### F9 – Integrácia so systémom Android 16
+
+- Vzhľad Material 3 Expressive, dynamické farby, zobrazenie od okraja po okraj.
+- Dlaždica v rýchlych nastaveniach na priame spustenie skenovania.
+- Live Update notifikácia pre OCR a tvorbu PDF.
+- Využitie rozšírení kamery cez CameraX, ak ich zariadenie podporuje (HDR, nočný režim).
+
+## 4. Mimo rozsahu fázy 1
+
+**Fáza 2:** knižnica dokumentov s fulltextovým vyhľadávaním v texte z OCR, kopírovanie a export textu (TXT, prípadne DOCX), export strán ako JPG/PNG.
+
+**Fáza 3:** režim kniha (rozdelenie dvojstrany), režim preukaz (obe strany karty na jednu stranu A4), podpis, anotácie, retuš škvŕn.
+
+**Vylúčené:** ovládanie tlačidlami hlasitosti, cloudové služby v aplikácii, reklamy, analytika.
+
+## 5. Nefunkčné požiadavky
+
+- **Súkromie:** žiadne sieťové povolenie (`INTERNET` sa nedeklaruje). Povolenia: `CAMERA`, `POST_NOTIFICATIONS`.
+- **Výkon:** detekcia v reálnom čase bez zasekávania náhľadu; OCR jednej strany A4 cieľovo do 3 s na S25 Ultra.
+- **Spoľahlivosť:** nasnímané strany sa ukladajú priebežne, takže pád aplikácie ani jej ukončenie systémom nespôsobia stratu práce.
+- **Kvalita výstupu:** text čitateľný pri tlači A4; veľkosť PDF pri štandardnej kvalite cieľovo do 300 kB na stranu.
+
+## 6. Technické riešenie
+
+| Oblasť | Riešenie |
+|---|---|
+| Jazyk a UI | Kotlin, Jetpack Compose, Material 3 Expressive |
+| Kamera | CameraX (`Preview`, `ImageAnalysis`, `ImageCapture`) |
+| Detekcia dokumentu | OpenCV (detekcia hrán, kontúry, aproximácia štvoruholníka); podľa výsledkov testov neskôr segmentačný model TFLite |
+| Spracovanie obrazu | OpenCV (perspektívna transformácia, filtre) |
+| OCR | kandidáti: Tesseract 5 s modelmi `tessdata_best` (slk, eng) a Google ML Kit Text Recognition v2 |
+| PDF | PdfBox-Android (obrazová vrstva a neviditeľná textová vrstva) |
+| Perzistencia | Room (metadáta), interné súbory (strany), DataStore (nastavenia) |
+| Práca na pozadí | WorkManager |
+| Zostavenie | Gradle, GitHub Actions (artefakt: podpísaný APK) |
+
+**Voľba OCR enginu.** ML Kit rozpoznáva znaky latinky robustne, nemá však jazykový model pre slovenčinu. Tesseract s modelom `slk` jazykový model má a na geometricky korigovaných, binarizovaných stranách dosahuje vysokú presnosť. Konečná voľba sa urobí porovnaním oboch enginov na reprezentatívnej vzorke skutočných dokumentov používateľa. Kritériá sú chybovosť na úrovni znakov (CER) so zvláštnym zreteľom na diakritiku a čas spracovania.
+
+## 7. Postup realizácie
+
+1. Kostra projektu, zostavovanie APK cez GitHub Actions.
+2. Kamera a živá detekcia dokumentu (F1, F2).
+3. Automatické snímanie a stavový automat (F3); ladenie na zariadení podľa spätnej väzby.
+4. Úprava geometrie a filtre (F4, F5), správa strán (F6).
+5. Testovací režim OCR, porovnanie enginov, voľba (F7).
+6. Generovanie vyhľadávateľného PDF a ukladanie do zvoleného priečinka (F7, F8).
+7. Integrácia so systémom (F9), lokalizácia, záverečné ladenie.
+
+## 8. Akceptačné kritériá fázy 1
+
+- Pri zapnutom automatickom snímaní sa sada 20 listov A4 prikladaných po jednom nasníma bez dotyku obrazovky, bez duplicít a bez vynechania listu.
+- Pri namierení na scénu bez dokumentu (podlaha, osoba, nábytok) nedôjde k automatickému nasnímaniu.
+- Vo výslednom PDF možno vyhľadať slovo so slovenskou diakritikou a skopírovať text.
+- PDF sa objaví vo zvolenom priečinku a aplikácia MEGA ho zosynchronizuje.
+- Aplikácia funguje v režime lietadlo.
