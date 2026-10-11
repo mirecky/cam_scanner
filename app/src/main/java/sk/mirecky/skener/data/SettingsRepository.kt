@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import sk.mirecky.skener.scanner.ScanMode
 
+/** Signál po nasnímaní strany. */
+enum class CaptureSignal { SOUND, VIBRATION, SILENT }
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 /** Trvalé nastavenia, ktoré si aplikácia pamätá medzi spusteniami. */
@@ -25,6 +28,15 @@ class SettingsRepository(private val context: Context) {
                 ?: ScanMode.DOCUMENT
         }
 
+    val captureSignal: Flow<CaptureSignal> =
+        context.dataStore.data.map { prefs ->
+            prefs[KEY_SIGNAL]?.let { name -> CaptureSignal.entries.firstOrNull { it.name == name } } ?: CaptureSignal.SOUND
+        }
+
+    suspend fun setCaptureSignal(signal: CaptureSignal) {
+        context.dataStore.edit { it[KEY_SIGNAL] = signal.name }
+    }
+
     suspend fun setAutoCapture(enabled: Boolean) {
         context.dataStore.edit { it[KEY_AUTO_CAPTURE] = enabled }
     }
@@ -36,5 +48,6 @@ class SettingsRepository(private val context: Context) {
     private companion object {
         val KEY_AUTO_CAPTURE = booleanPreferencesKey("auto_capture")
         val KEY_SCAN_MODE = stringPreferencesKey("scan_mode")
+        val KEY_SIGNAL = stringPreferencesKey("capture_signal")
     }
 }

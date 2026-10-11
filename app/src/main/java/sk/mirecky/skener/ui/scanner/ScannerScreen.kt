@@ -5,10 +5,27 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
-import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.util.Size
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.BrightnessHigh
+import androidx.compose.material.icons.outlined.BrightnessLow
+import androidx.compose.material.icons.outlined.BrightnessMedium
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlin.math.roundToInt
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -27,7 +44,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import sk.mirecky.skener.ui.pages.PageImage
+import sk.mirecky.skener.ui.common.PageImage
+import sk.mirecky.skener.data.CaptureSignal
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,7 +93,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -78,12 +101,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import sk.mirecky.skener.R
 import sk.mirecky.skener.scanner.ScanMode
 
 @Composable
-fun ScannerScreen(onOpenPages: () -> Unit, viewModel: ScannerViewModel = viewModel()) {
+fun ScannerScreen(
+    viewModel: ScannerViewModel,
+    onOpenDocument: (String) -> Unit,
+    onOpenLibrary: () -> Unit,
+) {
     val context = LocalContext.current
     var hasPermission by remember {
         mutableStateOf(
@@ -102,7 +128,7 @@ fun ScannerScreen(onOpenPages: () -> Unit, viewModel: ScannerViewModel = viewMod
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (hasPermission) {
-            ScannerContent(viewModel, onOpenPages)
+            ScannerContent(viewModel, onOpenDocument, onOpenLibrary)
         } else {
             PermissionRationale(
                 showSettings = askedOnce,
@@ -119,14 +145,17 @@ fun ScannerScreen(onOpenPages: () -> Unit, viewModel: ScannerViewModel = viewMod
 }
 
 @Composable
-private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit) {
+private fun ScannerContent(viewModel: ScannerViewModel, onOpenDocument: (String) -> Unit, onOpenLibrary: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val view = LocalView.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val overlay by viewModel.overlay.collectAsStateWithLifecycle()
+    val exposure by viewModel.exposure.collectAsStateWithLifecycle()
+    var adjustingExposure by remember { mutableStateOf(false) }
     var showDebug by remember { mutableStateOf(true) }
     val flash = remember { Animatable(0f) }
+    val signalPlayer = remember { SignalPlayer(context) }
+    DisposableEffect(signalPlayer) { onDispose { signalPlayer.release() } }
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val controller = remember {
@@ -162,38 +191,81 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit)
         }
     }
     LaunchedEffect(Unit) {
-        viewModel.captureEvents.collect {
-            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        viewModel.captureEvents.collect { signal ->
+            signalPlayer.play(signal)
             flash.snapTo(0.8f)
             flash.animateTo(0f, tween(350))
         }
     }
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        StatusBar(
-            state,
-            debug = if (showDebug) overlay.debug else null,
-            onClick = { showDebug = !showDebug },
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.Top) {
+            IconButton(onClick = onOpenLibrary) {
+                Icon(Icons.Outlined.Home, stringResource(R.string.action_library), tint = Color.White)
+            }
+            StatusBar(
+                state,
+                debug = if (showDebug) overlay.debug else null,
+                onClick = { showDebug = !showDebug },
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = viewModel::cycleSignal) {
+                val (icon, label) = when (state.signal) {
+                    CaptureSignal.SOUND -> Icons.AutoMirrored.Outlined.VolumeUp to R.string.signal_sound
+                    CaptureSignal.VIBRATION -> Icons.Outlined.Vibration to R.string.signal_vibration
+                    CaptureSignal.SILENT -> Icons.AutoMirrored.Outlined.VolumeOff to R.string.signal_silent
+                }
+                Icon(icon, stringResource(label), tint = Color.White)
+            }
+        }
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             CameraPreview(controller, Modifier.fillMaxSize())
             DocumentOverlay(overlay, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = flash.value }.background(Color.White))
+            val range = viewModel.exposureRange()
+            if (adjustingExposure && range != null) {
+                ExposureSlider(exposure, range, viewModel.exposureStep(), Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+            } else if (exposure != 0) {
+                // Nastavený jas je viditeľný; ťuknutím sa vráti na predvolený.
+                AssistChip(
+                    onClick = { viewModel.setExposure(0) },
+                    label = { Text(stringResource(R.string.exposure_label, "%+.1f".format(exposure * viewModel.exposureStep()))) },
+                    leadingIcon = { Icon(Icons.Outlined.BrightnessMedium, null) },
+                    colors = AssistChipDefaults.assistChipColors(containerColor = Color.Black.copy(alpha = 0.5f), labelColor = Color.White, leadingIconContentColor = Color.White),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                )
+            }
         }
 
-        ModeSelector(
-            mode = state.mode,
-            onSelect = viewModel::setMode,
-            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp),
-        )
+        Box(Modifier.fillMaxWidth().padding(top = 12.dp, start = 16.dp, end = 16.dp)) {
+            ModeSelector(
+                mode = state.mode,
+                onSelect = viewModel::setMode,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            val docId = state.documentId
+            if (docId != null && state.pageCount > 0) {
+                // Hotovo: dokument je kompletný, otvorí sa a ďalšie skenovanie začne nový dokument.
+                FilledTonalButton(
+                    onClick = {
+                        onOpenDocument(docId)
+                        viewModel.startNewDocument()
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                ) { Text(stringResource(R.string.action_done)) }
+            }
+        }
 
         ControlBar(
             state = state,
             onCapture = viewModel::captureManually,
             onToggleAuto = viewModel::toggleAutoCapture,
-            onOpenPages = onOpenPages,
+            onOpenDocument = { state.documentId?.let(onOpenDocument) },
+            exposure = exposure,
+            exposureRange = viewModel::exposureRange,
+            onExposure = viewModel::setExposure,
+            onAdjustingExposure = { adjustingExposure = it },
             modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp, horizontal = 24.dp),
         )
     }
@@ -257,11 +329,17 @@ private fun ControlBar(
     state: ScannerUiState,
     onCapture: () -> Unit,
     onToggleAuto: () -> Unit,
-    onOpenPages: () -> Unit,
+    onOpenDocument: () -> Unit,
+    exposure: Int,
+    exposureRange: () -> IntRange?,
+    onExposure: (Int) -> Unit,
+    onAdjustingExposure: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         val pagesLabel = pluralStringResource(R.plurals.page_count, state.pageCount, state.pageCount)
+        // Bez strán nie je čo otvoriť: náhľad je neaktívny.
+        val hasPages = state.documentId != null && state.pageCount > 0
         BadgedBox(
             badge = { if (state.pageCount > 0) Badge { Text(state.pageCount.toString()) } },
         ) {
@@ -269,8 +347,8 @@ private fun ControlBar(
                 Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .border(2.dp, Color.White, RoundedCornerShape(8.dp))
-                    .clickable(onClick = onOpenPages)
+                    .border(2.dp, Color.White.copy(alpha = if (hasPages) 1f else 0.3f), RoundedCornerShape(8.dp))
+                    .clickable(enabled = hasPages, onClick = onOpenDocument)
                     .semantics { contentDescription = pagesLabel },
                 contentAlignment = Alignment.Center,
             ) {
@@ -278,34 +356,120 @@ private fun ControlBar(
                 if (last != null) {
                     PageImage(last, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                    Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(30.dp))
+                }
+                if (state.processing > 0) {
+                    CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                 }
             }
         }
 
-        ShutterButton(enabled = state.status != ScanStatus.SAVING, onClick = onCapture)
+        ShutterButton(
+            enabled = state.status != ScanStatus.SAVING,
+            onClick = onCapture,
+            exposure = exposure,
+            exposureRange = exposureRange,
+            onExposure = onExposure,
+            onAdjusting = onAdjustingExposure,
+        )
 
         AutoCaptureToggle(enabled = state.autoCapture, onToggle = onToggleAuto)
     }
 }
 
+/**
+ * Spúšť: ťuknutie nasníma stranu, podržanie zapne nastavenie jasu – ťahanie doľava stmaví,
+ * doprava zosvetlí (korekcia expozície kamery).
+ */
 @Composable
-private fun ShutterButton(enabled: Boolean, onClick: () -> Unit) {
+private fun ShutterButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    exposure: Int,
+    exposureRange: () -> IntRange?,
+    onExposure: (Int) -> Unit,
+    onAdjusting: (Boolean) -> Unit,
+) {
     val description = stringResource(R.string.action_capture)
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
+    val haptics = LocalHapticFeedback.current
+    val stepPx = with(LocalDensity.current) { EXPOSURE_STEP_DP.dp.toPx() }
+    val currentExposure by rememberUpdatedState(exposure)
+    val currentEnabled by rememberUpdatedState(enabled)
+    Box(
+        Modifier
             .size(80.dp)
             .border(4.dp, Color.White, CircleShape)
             .padding(8.dp)
-            .semantics { contentDescription = description },
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = Color.White,
-            disabledContainerColor = Color.White.copy(alpha = 0.4f),
-        ),
-    ) {}
+            .clip(CircleShape)
+            .background(if (enabled) Color.White else Color.White.copy(alpha = 0.4f))
+            .semantics { contentDescription = description }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    var released = false
+                    val finished = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        released = waitForUpOrCancellation() != null
+                        true
+                    }
+                    if (finished != null) {
+                        if (released && currentEnabled) onClick()
+                        return@awaitEachGesture
+                    }
+                    // Podržanie: nastavenie jasu ťahaním vodorovne.
+                    val range = exposureRange() ?: return@awaitEachGesture
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onAdjusting(true)
+                    val startIndex = currentExposure
+                    val startX = down.position.x
+                    drag(down.id) { change ->
+                        val index = (startIndex + ((change.position.x - startX) / stepPx).roundToInt()).coerceIn(range)
+                        if (index != currentExposure) {
+                            onExposure(index)
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        change.consume()
+                    }
+                    onAdjusting(false)
+                }
+            },
+    )
 }
+
+/** Posuvník jasu zobrazený počas podržania spúšte. */
+@Composable
+private fun ExposureSlider(index: Int, range: IntRange, step: Float, modifier: Modifier = Modifier) {
+    Surface(shape = RoundedCornerShape(24.dp), color = Color.Black.copy(alpha = 0.6f), modifier = modifier) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                stringResource(R.string.exposure_label, "%+.1f".format(index * step)),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.BrightnessLow, null, tint = Color.White)
+                Slider(
+                    value = index.toFloat(),
+                    onValueChange = {},
+                    valueRange = range.first.toFloat()..range.last.toFloat(),
+                    steps = (range.last - range.first - 1).coerceAtLeast(0),
+                    enabled = false,
+                    colors = SliderDefaults.colors(
+                        disabledThumbColor = Color.White,
+                        disabledActiveTrackColor = Color.White,
+                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                        disabledActiveTickColor = Color.Transparent,
+                        disabledInactiveTickColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.width(220.dp),
+                )
+                Icon(Icons.Outlined.BrightnessHigh, null, tint = Color.White)
+            }
+        }
+    }
+}
+
+/** Šírka ťahu prstom na jeden krok expozície. */
+private const val EXPOSURE_STEP_DP = 22
 
 @Composable
 private fun AutoCaptureToggle(enabled: Boolean, onToggle: () -> Unit) {

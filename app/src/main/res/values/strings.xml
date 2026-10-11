@@ -21,23 +21,60 @@
     <string name="action_capture">Capture</string>
     <string name="action_auto_on">Automatic capture on</string>
     <string name="action_auto_off">Automatic capture off</string>
-    <string name="action_pages">Pages</string>
     <string name="label_auto">AUTO</string>
     <string name="label_manual">MANUAL</string>
 
     <string name="action_back">Back</string>
-    <string name="action_back_to_camera">Back to camera</string>
     <string name="action_close">Close</string>
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_rotate">Rotate</string>
-    <string name="action_move_left">Move left</string>
-    <string name="action_move_right">Move right</string>
-    <string name="action_clear_all">Delete all pages</string>
-    <string name="pages_empty">No pages scanned yet.</string>
     <string name="page_position">%1$d / %2$d</string>
-    <string name="clear_title">Delete all pages?</string>
-    <string name="clear_text">All scanned pages of this document will be deleted. This cannot be undone.</string>
+
+    <string name="action_library">Documents</string>
+    <string name="action_done">Done</string>
+    <string name="action_scan">Scan</string>
+    <string name="action_share">Share PDF</string>
+    <string name="action_select_all">Select all</string>
+    <string name="action_filter">Filter</string>
+    <string name="action_filter_all">Filter</string>
+    <string name="action_add_pages">Add pages</string>
+    <string name="action_save">Save</string>
+    <string name="library_title">Documents</string>
+    <string name="library_empty">No documents yet. Tap Scan to start.</string>
+    <string name="selected_count">%d selected</string>
+    <string name="pdf_updating">Updating PDF…</string>
+    <string name="pdf_not_ready">PDF is still being created, try again in a moment.</string>
+    <string name="delete_documents_text">Documents and their PDFs in Documents/Skener will be deleted. This cannot be undone.</string>
+    <string name="delete_pages_text">Selected pages will be removed from the document and the PDF will be updated.</string>
+    <string name="delete_all_pages_text">All pages will be deleted, so the whole document and its PDF will be deleted.</string>
+    <string name="rename_title">Rename document</string>
+    <string name="signal_sound">Signal: sound</string>
+    <string name="signal_vibration">Signal: vibration</string>
+    <string name="signal_silent">Signal: off</string>
+    <string name="filter_bw">Black & white</string>
+    <string name="filter_bw_desc">Clean white paper, black text, shadows and specks removed</string>
+    <string name="filter_gray">Grayscale</string>
+    <string name="filter_gray_desc">Keeps images and shades, shadows removed</string>
+    <string name="filter_color">Color</string>
+    <string name="filter_color_desc">White paper, natural colors (forms, stamps)</string>
+    <string name="filter_whiteboard">Whiteboard</string>
+    <string name="filter_whiteboard_desc">Suppresses glare, vivid markers</string>
+    <string name="filter_original">Original</string>
+    <string name="filter_original_desc">Only cropped and straightened</string>
+    <string name="exposure_label">Brightness %s EV</string>
+    <plurals name="delete_documents_title">
+        <item quantity="one">Delete %d document?</item>
+        <item quantity="other">Delete %d documents?</item>
+    </plurals>
+    <plurals name="delete_pages_title">
+        <item quantity="one">Delete %d page?</item>
+        <item quantity="other">Delete %d pages?</item>
+    </plurals>
+    <plurals name="filter_title">
+        <item quantity="one">Filter for %d page</item>
+        <item quantity="other">Filter for %d pages</item>
+    </plurals>
 
     <plurals name="page_count">
         <item quantity="one">%d page</item>

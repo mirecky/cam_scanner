@@ -86,6 +86,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
     implementation(libs.telephoto.coil3)
+    implementation(libs.reorderable)
+    // Šifrovanie PDF nepoužívame, BouncyCastle by zbytočne zväčšil aplikáciu.
+    implementation(libs.pdfbox.android) { exclude(group = "org.bouncycastle") }
     implementation(libs.opencv)
 
     testImplementation(libs.junit)

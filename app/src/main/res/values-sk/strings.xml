@@ -21,23 +21,66 @@
     <string name="action_capture">Nasnímať</string>
     <string name="action_auto_on">Automatické snímanie zapnuté</string>
     <string name="action_auto_off">Automatické snímanie vypnuté</string>
-    <string name="action_pages">Strany</string>
     <string name="label_auto">AUTO</string>
     <string name="label_manual">RUČNE</string>
 
     <string name="action_back">Späť</string>
-    <string name="action_back_to_camera">Späť ku kamere</string>
     <string name="action_close">Zavrieť</string>
     <string name="action_delete">Zmazať</string>
     <string name="action_cancel">Zrušiť</string>
     <string name="action_rotate">Otočiť</string>
-    <string name="action_move_left">Posunúť doľava</string>
-    <string name="action_move_right">Posunúť doprava</string>
-    <string name="action_clear_all">Zmazať všetky strany</string>
-    <string name="pages_empty">Zatiaľ nie sú nasnímané žiadne strany.</string>
     <string name="page_position">%1$d / %2$d</string>
-    <string name="clear_title">Zmazať všetky strany?</string>
-    <string name="clear_text">Všetky nasnímané strany tohto dokumentu sa zmažú. Túto akciu nemožno vrátiť.</string>
+
+    <string name="action_library">Dokumenty</string>
+    <string name="action_done">Hotovo</string>
+    <string name="action_scan">Skenovať</string>
+    <string name="action_share">Zdieľať PDF</string>
+    <string name="action_select_all">Vybrať všetky</string>
+    <string name="action_filter">Filter</string>
+    <string name="action_filter_all">Filter</string>
+    <string name="action_add_pages">Pridať strany</string>
+    <string name="action_save">Uložiť</string>
+    <string name="library_title">Dokumenty</string>
+    <string name="library_empty">Zatiaľ žiadne dokumenty. Ťukni na Skenovať.</string>
+    <string name="selected_count">Vybrané: %d</string>
+    <string name="pdf_updating">Aktualizujem PDF…</string>
+    <string name="pdf_not_ready">PDF sa ešte vytvára, skús to o chvíľu.</string>
+    <string name="delete_documents_text">Dokumenty aj ich PDF v priečinku Dokumenty/Skener sa zmažú. Túto akciu nemožno vrátiť.</string>
+    <string name="delete_pages_text">Vybrané strany sa z dokumentu odstránia a PDF sa aktualizuje.</string>
+    <string name="delete_all_pages_text">Zmažú sa všetky strany, preto sa zmaže celý dokument aj jeho PDF.</string>
+    <string name="rename_title">Premenovať dokument</string>
+    <string name="signal_sound">Signál: zvuk</string>
+    <string name="signal_vibration">Signál: vibrácia</string>
+    <string name="signal_silent">Signál: vypnutý</string>
+    <string name="filter_bw">Čiernobiely</string>
+    <string name="filter_bw_desc">Čistý biely papier, čierny text, bez tieňa a škvŕn</string>
+    <string name="filter_gray">Odtiene šedej</string>
+    <string name="filter_gray_desc">Zachová obrázky a odtiene, bez tieňa</string>
+    <string name="filter_color">Farebný</string>
+    <string name="filter_color_desc">Biely papier, prirodzené farby (tlačivá, pečiatky)</string>
+    <string name="filter_whiteboard">Tabuľa</string>
+    <string name="filter_whiteboard_desc">Potlačí odlesky, sýte fixky</string>
+    <string name="filter_original">Originál</string>
+    <string name="filter_original_desc">Len orezané a vyrovnané</string>
+    <string name="exposure_label">Jas %s EV</string>
+    <plurals name="delete_documents_title">
+        <item quantity="one">Zmazať %d dokument?</item>
+        <item quantity="few">Zmazať %d dokumenty?</item>
+        <item quantity="many">Zmazať %d dokumentu?</item>
+        <item quantity="other">Zmazať %d dokumentov?</item>
+    </plurals>
+    <plurals name="delete_pages_title">
+        <item quantity="one">Zmazať %d stranu?</item>
+        <item quantity="few">Zmazať %d strany?</item>
+        <item quantity="many">Zmazať %d strany?</item>
+        <item quantity="other">Zmazať %d strán?</item>
+    </plurals>
+    <plurals name="filter_title">
+        <item quantity="one">Filter pre %d stranu</item>
+        <item quantity="few">Filter pre %d strany</item>
+        <item quantity="many">Filter pre %d strany</item>
+        <item quantity="other">Filter pre %d strán</item>
+    </plurals>
 
     <plurals name="page_count">
         <item quantity="one">%d strana</item>

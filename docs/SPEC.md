@@ -130,7 +130,7 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 
 ## 4. Mimo rozsahu fázy 1
 
-**Fáza 2:** knižnica dokumentov s fulltextovým vyhľadávaním v texte z OCR, kopírovanie a export textu (TXT), export strán ako JPG/PNG, voliteľné AI funkcie podľa kap. 4.1.
+**Fáza 2:** fulltextové vyhľadávanie v knižnici podľa textu z OCR, kopírovanie a export textu (TXT, základný Markdown z OCR bez AI), export strán ako JPG/PNG, voliteľné AI funkcie podľa kap. 4.1 (štruktúrovaný Markdown, DOCX, XLSX).
 
 **Fáza 3:** režim kniha (rozdelenie dvojstrany), režim preukaz (obe strany karty na jednu stranu A4), podpis, anotácie, retuš škvŕn.
 
@@ -150,11 +150,11 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 |---|---|---|
 | AI1 | Prepis rukopisu a tabule | textový prepis uložený ako samostatný súbor (TXT/DOCX) vedľa PDF |
 | AI2 | Návrh názvu súboru podľa obsahu (napr. `2026-10-11_Faktura_Orange.pdf`) | návrh názvu, ktorý používateľ potvrdí alebo upraví; bez potvrdenia platí predvolený názov podľa F8 |
-| AI3 | Prevod dokumentu do formátu Word | DOCX so zachovanou štruktúrou (nadpisy, odseky, zoznamy, tabuľky) |
+| AI3 | Prevod dokumentu do formátu Word alebo Markdown | DOCX alebo MD so zachovanou štruktúrou (nadpisy, odseky, zoznamy, tabuľky) |
 | AI4 | Prevod tabuliek do formátu Excel | XLSX, jedna tabuľka na hárok, číselné bunky ako čísla (nie text) |
 | AI5 | Vyťahovanie údajov podľa šablóny | štruktúrované polia (napr. faktúra: dodávateľ, číslo, dátum vystavenia a splatnosti, suma, IBAN, variabilný symbol); zobrazenie, kopírovanie, pripojenie riadku do zvoleného súboru XLSX |
 
-**Technický princíp AI3–AI5:** AI nevracia hotový súbor. Vracia štruktúrované údaje (JSON podľa pevnej schémy) a súbory DOCX a XLSX z nich zostavuje aplikácia lokálne. Formát výstupu je tak vždy platný a pod kontrolou aplikácie. AI pracuje s obrazom strany aj s textom z lokálneho OCR, čo znižuje riziko chybného prečítania.
+**Technický princíp AI3–AI5:** AI nevracia hotový súbor. Vracia štruktúrované údaje (JSON podľa pevnej schémy) a súbory DOCX, XLSX a MD z nich zostavuje aplikácia lokálne. Formát výstupu je tak vždy platný a pod kontrolou aplikácie. AI pracuje s obrazom strany aj s textom z lokálneho OCR, čo znižuje riziko chybného prečítania.
 
 **Dôsledok pre povolenia:** zavedením AI funkcií pribudne povolenie `INTERNET`, ktoré sa využíva výhradne na komunikáciu s AI API. Až do nastavenia API kľúča aplikácia nevykonáva žiadnu sieťovú komunikáciu.
 
