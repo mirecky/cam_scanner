@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.PageFilter
 import sk.mirecky.skener.scanner.Quad
 import sk.mirecky.skener.scanner.ScanMode
@@ -121,12 +122,67 @@ class DocumentRepository(private val context: Context) {
         val doc = document(docId) ?: return
         val targets = doc.pages.filter { it.id in pageIds && (it.filter != filter || it.level != level) }
         if (targets.isEmpty()) return
-        withContext(Dispatchers.Default) { targets.forEach { PageRenderer.applyFilter(it.cropFile, it.displayFile, filter, level) } }
+        withContext(Dispatchers.Default) { targets.forEach { PageRenderer.applyFilter(it.cropFile, it.displayFile, filter, level, it.adjust) } }
         val now = System.currentTimeMillis()
         val changed = targets.map { it.id }.toSet()
         modify(docId) { d ->
             d.copy(pages = d.pages.map { p -> if (p.id in changed) p.copy(filter = filter, level = level, version = now) else p })
         }
+    }
+
+    suspend fun setAdjust(docId: String, pageIds: Set<String>, adjust: Adjust) {
+        val doc = document(docId) ?: return
+        val targets = doc.pages.filter { it.id in pageIds && it.adjust != adjust }
+        if (targets.isEmpty()) return
+        withContext(Dispatchers.Default) {
+            targets.forEach { PageRenderer.applyFilter(it.cropFile, it.displayFile, it.filter, it.level, adjust) }
+        }
+        val now = System.currentTimeMillis()
+        val changed = targets.map { it.id }.toSet()
+        modify(docId) { d ->
+            d.copy(pages = d.pages.map { p -> if (p.id in changed) p.copy(adjust = adjust, version = now) else p })
+        }
+    }
+
+    /** Nový orez strany z pôvodnej fotografie podľa [quad] (null = celá fotografia). */
+    suspend fun recrop(docId: String, pageId: String, quad: Quad?) {
+        val page = document(docId)?.pages?.firstOrNull { it.id == pageId } ?: return
+        if (!page.originalFile.exists()) return
+        withContext(Dispatchers.Default) {
+            PageRenderer.renderNew(
+                page.originalFile, page.cropFile, page.displayFile, quad, page.mode,
+                page.filter, page.level, page.adjust, page.rotation,
+            )
+        }
+        val now = System.currentTimeMillis()
+        modify(docId) { d -> d.copy(pages = d.pages.map { p -> if (p.id == pageId) p.copy(quad = quad, version = now) else p }) }
+    }
+
+    /**
+     * Prefotenie strany: nová fotografia nahradí stranu [pageId] na tom istom mieste
+     * a prevezme jej filter, parameter a úpravy.
+     */
+    suspend fun replacePage(slot: PageSlot, pageId: String, quad: Quad?, mode: ScanMode) {
+        val old = document(slot.docId)?.pages?.firstOrNull { it.id == pageId }
+        if (old == null) {
+            addPage(slot, quad, mode)
+            return
+        }
+        val page = PageItem(
+            slot.pageId, slot.dir, old.filter, old.level, old.adjust, mode,
+            rotation = 0, quad = quad, version = System.currentTimeMillis(),
+        )
+        withContext(Dispatchers.Default) {
+            try {
+                PageRenderer.renderNew(slot.originalFile, page.cropFile, page.displayFile, quad, mode, page.filter, page.level, page.adjust)
+            } catch (e: Exception) {
+                Log.e(TAG, "Spracovanie prefotenej strany zlyhalo", e)
+                slot.originalFile.copyTo(page.cropFile, overwrite = true)
+                slot.originalFile.copyTo(page.displayFile, overwrite = true)
+            }
+        }
+        modify(slot.docId) { d -> d.copy(pages = d.pages.map { if (it.id == pageId) page else it }) }
+        withContext(Dispatchers.IO) { old.dir.deleteRecursively() }
     }
 
     suspend fun rename(docId: String, name: String) {
@@ -225,7 +281,7 @@ class DocumentRepository(private val context: Context) {
                 val dir = File(File(docDir, "pages"), id).apply { mkdirs() }
                 f.copyTo(File(dir, "crop.jpg"), overwrite = true)
                 f.copyTo(File(dir, "display.jpg"), overwrite = true)
-                PageItem(id, dir, PageFilter.ORIGINAL, 0, ScanMode.DOCUMENT, 0, null, now)
+                PageItem(id, dir, PageFilter.ORIGINAL, level = 0, mode = ScanMode.DOCUMENT, rotation = 0, quad = null, version = now)
             }
             DocumentJson.write(DocumentItem(docId, docDir, defaultName(now), now, now, pages, null))
         }

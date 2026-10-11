@@ -80,6 +80,29 @@
     <string name="param_saturation">Sýtosť farieb</string>
     <string name="param_brightness">Jas</string>
 
+    <string name="pdf_saved_location">PDF v Dokumenty/Skener</string>
+    <string name="action_overview">Všetky strany</string>
+    <string name="action_previous_page">Predchádzajúca strana</string>
+    <string name="action_next_page">Ďalšia strana</string>
+    <string name="page_of">Strana %1$d / %2$d</string>
+    <string name="tool_retake">Znova</string>
+    <string name="tool_crop">Orezať</string>
+    <string name="tool_adjust">Upraviť</string>
+    <string name="tool_clean">Vyčistiť</string>
+    <string name="tool_text">Text</string>
+    <string name="tool_upcoming">Pripravujem – príde v ďalšej verzii</string>
+    <string name="action_continue_scanning">Pokračovať v skenovaní</string>
+    <string name="applied_to_all">Použité na všetky strany</string>
+    <string name="delete_page_title">Zmazať stranu %d?</string>
+    <string name="param_sharpness">Ostrosť</string>
+    <string name="action_reset">Pôvodné</string>
+    <string name="apply_to_all_short">Všetky strany</string>
+    <string name="crop_auto">Automaticky</string>
+    <string name="crop_full">Celá fotka</string>
+    <string name="crop_not_found">Okraje sa nenašli, uprav rohy ručne.</string>
+    <string name="crop_invalid">Rohy sa krížia, posuň ich do správneho tvaru.</string>
+    <string name="retake_hint">Prefotenie strany – ťuknutím zrušíš</string>
+
     <plurals name="page_count">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>

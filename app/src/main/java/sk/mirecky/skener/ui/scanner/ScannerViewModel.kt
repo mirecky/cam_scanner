@@ -85,6 +85,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val _captureEvents = MutableSharedFlow<CaptureSignal>(extraBufferCapacity = 1)
     val captureEvents: SharedFlow<CaptureSignal> = _captureEvents.asSharedFlow()
 
+    /** Strana, ktorá sa má prefotiť (dokument, strana); null = bežné skenovanie. */
+    private val _retake = MutableStateFlow<Pair<String, String>?>(null)
+    val retake: StateFlow<Pair<String, String>?> = _retake.asStateFlow()
+
+    /** Po prefotení strany: (dokument, strana) na návrat do editora. */
+    private val _retakeDone = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 1)
+    val retakeDone: SharedFlow<Pair<String, String>> = _retakeDone.asSharedFlow()
+
     /** Aktuálny dokument, do ktorého pribúdajú strany. */
     private val documentId = MutableStateFlow<String?>(null)
     private val processing = MutableStateFlow(0)
@@ -145,6 +153,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             documentId.value = id
             synchronized(auto) { auto.reset() }
         }
+    }
+
+    /** Ďalšia snímka nahradí stranu [pageId] dokumentu [docId]. */
+    fun retake(docId: String, pageId: String) {
+        continueDocument(docId)
+        _retake.value = docId to pageId
+        synchronized(auto) { auto.reset() }
+    }
+
+    fun cancelRetake() {
+        _retake.value = null
     }
 
     fun cycleSignal() {
@@ -260,9 +279,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     setTransientStatus(ScanStatus.CAPTURED, resetAfterMs = 1_500)
                     // Orezanie a filter bežia na pozadí; ďalší list sa dá snímať hneď.
                     processing.value += 1
+                    val target = _retake.value?.takeIf { it.first == slot.docId }
+                    if (target != null) _retake.value = null
                     viewModelScope.launch {
                         try {
-                            repository.addPage(slot, quad, mode)
+                            if (target != null) {
+                                repository.replacePage(slot, target.second, quad, mode)
+                                _retakeDone.tryEmit(target.first to slot.pageId)
+                            } else {
+                                repository.addPage(slot, quad, mode)
+                            }
                         } finally {
                             processing.value -= 1
                         }

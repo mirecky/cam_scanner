@@ -76,6 +76,29 @@
     <string name="param_saturation">Color saturation</string>
     <string name="param_brightness">Brightness</string>
 
+    <string name="pdf_saved_location">PDF in Documents/Skener</string>
+    <string name="action_overview">All pages</string>
+    <string name="action_previous_page">Previous page</string>
+    <string name="action_next_page">Next page</string>
+    <string name="page_of">Page %1$d of %2$d</string>
+    <string name="tool_retake">Retake</string>
+    <string name="tool_crop">Crop</string>
+    <string name="tool_adjust">Adjust</string>
+    <string name="tool_clean">Clean up</string>
+    <string name="tool_text">Text</string>
+    <string name="tool_upcoming">Coming in the next version</string>
+    <string name="action_continue_scanning">Continue scanning</string>
+    <string name="applied_to_all">Applied to all pages</string>
+    <string name="delete_page_title">Delete page %d?</string>
+    <string name="param_sharpness">Sharpness</string>
+    <string name="action_reset">Reset</string>
+    <string name="apply_to_all_short">All pages</string>
+    <string name="crop_auto">Automatic</string>
+    <string name="crop_full">Whole photo</string>
+    <string name="crop_not_found">No document edges found, adjust the corners manually.</string>
+    <string name="crop_invalid">Corners cross each other, move them into a proper shape.</string>
+    <string name="retake_hint">Retaking a page – tap to cancel</string>
+
     <plurals name="page_count">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>

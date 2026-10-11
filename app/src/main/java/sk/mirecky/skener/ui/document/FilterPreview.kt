@@ -12,6 +12,7 @@ import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import sk.mirecky.skener.data.PageItem
+import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.Filters
 import sk.mirecky.skener.scanner.PageFilter
 import kotlin.math.max
@@ -34,8 +35,8 @@ class FilterPreview(private val page: PageItem) {
         base.complete(mat)
     }
 
-    suspend fun render(filter: PageFilter, level: Int): ImageBitmap = withContext(Dispatchers.Default) {
-        val out = Filters.apply(base.await(), filter, level)
+    suspend fun render(filter: PageFilter, level: Int, adjust: Adjust): ImageBitmap = withContext(Dispatchers.Default) {
+        val out = Filters.render(base.await(), filter, level, adjust)
         toImageBitmap(out).also { out.release() }
     }
 

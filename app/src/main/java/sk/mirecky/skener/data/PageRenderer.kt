@@ -7,6 +7,7 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfInt
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
+import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.Filters
 import sk.mirecky.skener.scanner.ImageOps
 import sk.mirecky.skener.scanner.PageFilter
@@ -19,8 +20,21 @@ internal object PageRenderer {
 
     private const val JPEG_QUALITY = 92
 
-    /** Z pôvodnej fotografie vytvorí farebný orez a výslednú stranu s filtrom. */
-    fun renderNew(original: File, crop: File, display: File, quad: Quad?, mode: ScanMode, filter: PageFilter) {
+    /**
+     * Z pôvodnej fotografie vytvorí farebný orez a výslednú stranu s filtrom a úpravami.
+     * [rotation] (násobok 90°) sa uplatní po orezaní, aby opätovný orez zachoval otočenie strany.
+     */
+    fun renderNew(
+        original: File,
+        crop: File,
+        display: File,
+        quad: Quad?,
+        mode: ScanMode,
+        filter: PageFilter,
+        level: Int = 0,
+        adjust: Adjust = Adjust.NONE,
+        rotation: Int = 0,
+    ) {
         // ImageDecoder uplatní orientáciu z EXIF, takže obraz je vzpriamený rovnako ako pri analýze.
         val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(original)) { decoder, _, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -38,15 +52,27 @@ internal object PageRenderer {
         } else {
             bgr
         }
-        write(cropped, crop)
-        renderFilter(cropped, filter, display)
-        cropped.release()
+        val rotated = rotate(cropped, rotation)
+        write(rotated, crop)
+        renderFilter(rotated, filter, display, level, adjust)
+        rotated.release()
+        if (rotated !== cropped) cropped.release()
+    }
+
+    private fun rotate(src: Mat, rotation: Int): Mat {
+        val code = when (((rotation % 360) + 360) % 360) {
+            90 -> Core.ROTATE_90_CLOCKWISE
+            180 -> Core.ROTATE_180
+            270 -> Core.ROTATE_90_COUNTERCLOCKWISE
+            else -> return src
+        }
+        return Mat().also { Core.rotate(src, it, code) }
     }
 
     /** Znovu vytvorí výslednú stranu z farebného orezu s iným filtrom. */
-    fun applyFilter(crop: File, display: File, filter: PageFilter, level: Int) {
+    fun applyFilter(crop: File, display: File, filter: PageFilter, level: Int, adjust: Adjust) {
         val src = Imgcodecs.imread(crop.path, Imgcodecs.IMREAD_COLOR)
-        renderFilter(src, filter, display, level)
+        renderFilter(src, filter, display, level, adjust)
         src.release()
     }
 
@@ -62,8 +88,8 @@ internal object PageRenderer {
         }
     }
 
-    private fun renderFilter(crop: Mat, filter: PageFilter, display: File, level: Int = 0) {
-        val out = Filters.apply(crop, filter, level)
+    private fun renderFilter(crop: Mat, filter: PageFilter, display: File, level: Int = 0, adjust: Adjust = Adjust.NONE) {
+        val out = Filters.render(crop, filter, level, adjust)
         write(out, display)
         out.release()
     }

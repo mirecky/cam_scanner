@@ -9,6 +9,16 @@ import org.opencv.imgproc.Imgproc
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+/** Ručné úpravy strany po filtri (−50…+50, 0 = bez úpravy). */
+data class Adjust(val brightness: Int = 0, val contrast: Int = 0, val sharpness: Int = 0) {
+    val isNeutral: Boolean get() = brightness == 0 && contrast == 0 && sharpness == 0
+
+    companion object {
+        val RANGE = -50..50
+        val NONE = Adjust()
+    }
+}
+
 /** Obrazový filter strany (špecifikácia F5). */
 enum class PageFilter {
     /** Čiernobiely dokument: odstránenie tieňa, prahovanie, odstránenie drobných škvŕn. */
@@ -53,6 +63,39 @@ object Filters {
             PageFilter.COLOR -> color(bgr, strength = 1.0, saturation = (1.15 + 0.1 * l).coerceAtLeast(0.4))
             PageFilter.WHITEBOARD -> color(bgr, strength = 1.0, saturation = (1.6 + 0.15 * l).coerceAtLeast(0.6))
         }
+    }
+
+    /** Filter a následne ručné úpravy (jas, kontrast, ostrosť). */
+    fun render(bgr: Mat, filter: PageFilter, level: Int, adjust: Adjust): Mat {
+        val out = apply(bgr, filter, level)
+        if (adjust.isNeutral) return out
+        return adjust(out, adjust).also { out.release() }
+    }
+
+    /**
+     * Jas posúva hodnoty, kontrast ich rozťahuje okolo strednej šedej, ostrosť je
+     * maska neostrosti (kladná) alebo jemné rozmazanie (záporná).
+     */
+    fun adjust(src: Mat, a: Adjust): Mat {
+        val alpha = 1.0 + a.contrast.coerceIn(Adjust.RANGE) / 100.0
+        val beta = 128.0 * (1 - alpha) + a.brightness.coerceIn(Adjust.RANGE) * 1.6
+        val out = Mat()
+        src.convertTo(out, -1, alpha, beta)
+        val s = a.sharpness.coerceIn(Adjust.RANGE)
+        if (s != 0) {
+            val sigma = max(out.cols(), out.rows()) / 1500.0 + 0.8
+            val blur = Mat()
+            Imgproc.GaussianBlur(out, blur, Size(0.0, 0.0), sigma)
+            if (s > 0) {
+                val k = s / 50.0 * 1.5
+                Core.addWeighted(out, 1 + k, blur, -k, 0.0, out)
+            } else {
+                val k = -s / 50.0
+                Core.addWeighted(out, 1 - k, blur, k, 0.0, out)
+            }
+            blur.release()
+        }
+        return out
     }
 
     /** Šedý obraz s odstráneným tieňom (pozadie ≈ 255). */

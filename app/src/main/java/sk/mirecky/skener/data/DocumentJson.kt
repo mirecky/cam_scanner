@@ -2,6 +2,7 @@ package sk.mirecky.skener.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.PageFilter
 import sk.mirecky.skener.scanner.Pt
 import sk.mirecky.skener.scanner.Quad
@@ -24,6 +25,7 @@ internal object DocumentJson {
                     .put("id", page.id)
                     .put("filter", page.filter.name)
                     .put("level", page.level)
+                    .put("adjust", JSONArray(listOf(page.adjust.brightness, page.adjust.contrast, page.adjust.sharpness)))
                     .put("mode", page.mode.name)
                     .put("rotation", page.rotation)
                     .put("version", page.version)
@@ -46,6 +48,7 @@ internal object DocumentJson {
                     dir = File(pagesDir, id),
                     filter = enumValueOrNull<PageFilter>(p.optString("filter")) ?: PageFilter.ORIGINAL,
                     level = p.optInt("level", 0),
+                    adjust = p.optJSONArray("adjust")?.let { a -> Adjust(a.optInt(0), a.optInt(1), a.optInt(2)) } ?: Adjust.NONE,
                     mode = enumValueOrNull<ScanMode>(p.optString("mode")) ?: ScanMode.DOCUMENT,
                     rotation = p.optInt("rotation", 0),
                     quad = p.optJSONArray("quad")?.let { a ->

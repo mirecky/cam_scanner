@@ -77,6 +77,7 @@ import sk.mirecky.skener.SkenerApp
 import sk.mirecky.skener.data.DocumentItem
 import sk.mirecky.skener.data.PageItem
 import sk.mirecky.skener.ui.common.PageImage
+import sk.mirecky.skener.ui.common.sharePdf
 
 /**
  * Detail dokumentu: mriežka strán.
@@ -85,7 +86,7 @@ import sk.mirecky.skener.ui.common.PageImage
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Unit) {
+fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Unit, onOpenPage: (Int) -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as SkenerApp
     val repository = app.documents
@@ -98,26 +99,11 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
     if (doc == null) return
 
     var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    var viewerIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-    // Strany, na ktoré sa v prehliadači dá použiť filter naraz (vybrané; null = všetky).
-    var viewerTargets by remember { mutableStateOf<Set<String>?>(null) }
     var confirmDelete by remember { mutableStateOf<Set<String>?>(null) }
     var renaming by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
 
-    val index = viewerIndex
-    if (index != null) {
-        BackHandler { viewerIndex = null }
-        PageViewer(
-            pages = doc.pages,
-            initialIndex = index.coerceIn(doc.pages.indices),
-            applyTargets = viewerTargets,
-            onClose = { viewerIndex = null; viewerTargets = null },
-            onRotate = { page -> app.scope.launch { repository.rotate(docId, setOf(page.id)) } },
-            onDelete = { page -> confirmDelete = setOf(page.id) },
-            onApplyFilter = { ids, filter, level -> app.scope.launch { repository.setFilter(docId, ids, filter, level) } },
-        )
-    } else {
+    run {
         BackHandler { if (selecting) selected = emptySet() else onBack() }
         Scaffold(
             topBar = {
@@ -133,14 +119,6 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                             }
                             IconButton(onClick = { app.scope.launch { repository.rotate(docId, selected) } }) {
                                 Icon(Icons.Outlined.RotateRight, stringResource(R.string.action_rotate))
-                            }
-                            IconButton(onClick = {
-                                // Úprava filtra pre vybrané strany: prehliadač na prvej vybranej strane.
-                                viewerTargets = selected
-                                viewerIndex = doc.pages.indexOfFirst { it.id in selected }.coerceAtLeast(0)
-                                selected = emptySet()
-                            }) {
-                                Icon(Icons.Outlined.AutoFixHigh, stringResource(R.string.action_filter))
                             }
                             IconButton(onClick = { confirmDelete = selected }) {
                                 Icon(Icons.Outlined.Delete, stringResource(R.string.action_delete))
@@ -173,10 +151,6 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                 if (!selecting) {
                     BottomAppBar {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { viewerTargets = null; viewerIndex = 0 }, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Outlined.AutoFixHigh, null)
-                                Text("  " + stringResource(R.string.action_filter_all))
-                            }
                             FilledTonalButton(onClick = { onAddPages(docId) }, modifier = Modifier.weight(1f)) {
                                 Icon(Icons.Outlined.AddAPhoto, null)
                                 Text("  " + stringResource(R.string.action_add_pages))
@@ -190,7 +164,7 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                 doc = doc,
                 selected = selected,
                 onToggle = { id -> selected = if (id in selected) selected - id else selected + id },
-                onOpen = { viewerIndex = it },
+                onOpen = onOpenPage,
                 onReorder = { order -> app.scope.launch { repository.reorder(docId, order) } },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
@@ -326,18 +300,4 @@ private fun PageTile(page: PageItem, number: Int, selected: Boolean, selecting: 
             )
         }
     }
-}
-
-private fun sharePdf(context: android.content.Context, doc: DocumentItem) {
-    val uri = doc.pdfUri
-    if (uri == null) {
-        Toast.makeText(context, R.string.pdf_not_ready, Toast.LENGTH_SHORT).show()
-        return
-    }
-    val send = Intent(Intent.ACTION_SEND)
-        .setType("application/pdf")
-        .putExtra(Intent.EXTRA_STREAM, Uri.parse(uri))
-        .putExtra(Intent.EXTRA_TITLE, doc.name)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(Intent.createChooser(send, doc.name))
 }

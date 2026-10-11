@@ -1,5 +1,6 @@
 package sk.mirecky.skener.data
 
+import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.PageFilter
 import sk.mirecky.skener.scanner.Quad
 import sk.mirecky.skener.scanner.ScanMode
@@ -12,6 +13,8 @@ data class PageItem(
     val filter: PageFilter,
     /** Parameter filtra (−5…+5, 0 = predvolené). */
     val level: Int,
+    /** Ručné úpravy po filtri. */
+    val adjust: Adjust = Adjust.NONE,
     val mode: ScanMode,
     /** Otočenie oproti pôvodnému orezu v stupňoch (0, 90, 180, 270). */
     val rotation: Int,

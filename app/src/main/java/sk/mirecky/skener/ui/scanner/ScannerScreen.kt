@@ -49,6 +49,7 @@ import sk.mirecky.skener.data.CaptureSignal
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -109,6 +110,7 @@ fun ScannerScreen(
     viewModel: ScannerViewModel,
     onOpenDocument: (String) -> Unit,
     onOpenLibrary: () -> Unit,
+    onRetakeDone: (docId: String, pageId: String) -> Unit,
 ) {
     val context = LocalContext.current
     var hasPermission by remember {
@@ -128,7 +130,7 @@ fun ScannerScreen(
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (hasPermission) {
-            ScannerContent(viewModel, onOpenDocument, onOpenLibrary)
+            ScannerContent(viewModel, onOpenDocument, onOpenLibrary, onRetakeDone)
         } else {
             PermissionRationale(
                 showSettings = askedOnce,
@@ -145,12 +147,19 @@ fun ScannerScreen(
 }
 
 @Composable
-private fun ScannerContent(viewModel: ScannerViewModel, onOpenDocument: (String) -> Unit, onOpenLibrary: () -> Unit) {
+private fun ScannerContent(
+    viewModel: ScannerViewModel,
+    onOpenDocument: (String) -> Unit,
+    onOpenLibrary: () -> Unit,
+    onRetakeDone: (String, String) -> Unit,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val overlay by viewModel.overlay.collectAsStateWithLifecycle()
     val exposure by viewModel.exposure.collectAsStateWithLifecycle()
+    val retake by viewModel.retake.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.retakeDone.collect { (doc, page) -> onRetakeDone(doc, page) } }
     var adjustingExposure by remember { mutableStateOf(false) }
     var showDebug by remember { mutableStateOf(true) }
     val flash = remember { Animatable(0f) }
@@ -205,6 +214,8 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenDocument: (String)
             }
             StatusBar(
                 state,
+                retaking = retake != null,
+                onCancelRetake = viewModel::cancelRetake,
                 debug = if (showDebug) overlay.debug else null,
                 onClick = { showDebug = !showDebug },
                 modifier = Modifier.weight(1f),
@@ -272,7 +283,14 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenDocument: (String)
 }
 
 @Composable
-private fun StatusBar(state: ScannerUiState, debug: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun StatusBar(
+    state: ScannerUiState,
+    retaking: Boolean,
+    onCancelRetake: () -> Unit,
+    debug: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val text = when (state.status) {
         ScanStatus.SEARCHING -> R.string.status_searching
         ScanStatus.HOLD_STILL -> R.string.status_hold_still
@@ -293,6 +311,14 @@ private fun StatusBar(state: ScannerUiState, debug: String?, onClick: () -> Unit
                 text = stringResource(text),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
+        if (retaking) {
+            AssistChip(
+                onClick = onCancelRetake,
+                label = { Text(stringResource(R.string.retake_hint)) },
+                trailingIcon = { Icon(Icons.Filled.Close, stringResource(R.string.action_cancel)) },
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         if (debug != null) {
