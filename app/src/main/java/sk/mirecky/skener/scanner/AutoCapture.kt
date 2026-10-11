@@ -32,6 +32,8 @@ data class CaptureState(
     val progress: Float = 0f,
     /** Dokument v zábere je zhodný s naposledy nasnímaným. */
     val sameAsLast: Boolean = false,
+    /** Rozdiel obsahu oproti naposledy nasnímanému listu, ak bol vyhodnotený (diagnostika). */
+    val difference: Double? = null,
 )
 
 data class AutoCaptureConfig(
@@ -40,8 +42,10 @@ data class AutoCaptureConfig(
     val maxCornerShift: Double = 0.015,
     /** Pohyb, ktorý ruší ustálenie a zároveň znamená „niečo sa v zábere zmenilo“. */
     val motionThreshold: Double = 4.0,
-    /** Posun obrysu oproti nasnímanému, ktorý sa považuje za výmenu listu. */
-    val changeCornerShift: Double = 0.05,
+    /** Ako dlho musí dokument v zábere chýbať, aby sa to považovalo za výmenu listu. */
+    val lostMsForChange: Long = 300,
+    /** Najkratší čas medzi dvoma automatickými snímkami. */
+    val minIntervalMs: Long = 1_500,
     /** Rozdiel odtlačkov, pod ktorým ide o ten istý list. */
     val sameSheetDifference: Double = 0.10,
 )
@@ -51,8 +55,8 @@ data class AutoCaptureConfig(
  *
  * HĽADANIE → USTÁLENIE → SNÍMANIE → ČAKANIE NA ZMENU → HĽADANIE/USTÁLENIE …
  *
- * Po nasnímaní sa ďalšia strana nasníma až vtedy, keď (a) v zábere nastala zmena (pohyb, strata
- * dokumentu alebo výrazný posun obrysu) a (b) obsah ustáleného dokumentu sa líši od posledného
+ * Po nasnímaní sa ďalšia strana nasníma až vtedy, keď (a) v zábere nastala zmena (pohyb alebo
+ * dokument dlhšie chýba v zábere) a (b) obsah ustáleného dokumentu sa líši od posledného
  * nasnímaného. Tým sa zabráni dvojitému nasnímaniu toho istého listu a zároveň sa rozpozná nový
  * list položený presne na miesto predchádzajúceho.
  *
@@ -63,9 +67,10 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
     private var phase = CapturePhase.SEARCHING
     private var anchor: Quad? = null
     private var stableSince = 0L
-    private var lastCapturedQuad: Quad? = null
     private var lastFingerprint: FloatArray? = null
     private var changeSeen = true
+    private var lostSince = -1L
+    private var lastCaptureAt = Long.MIN_VALUE / 2
 
     /**
      * Spracuje snímok. Vráti nový stav a príznak, či sa má práve teraz nasnímať strana
@@ -77,11 +82,16 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
 
         if (phase == CapturePhase.CAPTURING) return CaptureState(phase) to false
 
+        // Ako dlho už dokument v zábere chýba (krátke výpadky detekcie sa neberú ako výmena listu).
+        if (quad == null) {
+            if (lostSince < 0) lostSince = frame.timeMs
+        } else {
+            lostSince = -1
+        }
+        val lostLongEnough = lostSince >= 0 && frame.timeMs - lostSince >= config.lostMsForChange
+
         if (phase == CapturePhase.WAITING_FOR_CHANGE) {
-            val last = lastCapturedQuad
-            if (quad == null || moving || (last != null && quad.maxCornerShift(last) > config.changeCornerShift)) {
-                changeSeen = true
-            }
+            if (moving || lostLongEnough) changeSeen = true
             if (!changeSeen) return CaptureState(phase, sameAsLast = true) to false
             phase = CapturePhase.SEARCHING
         }
@@ -109,21 +119,24 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
         // Ustálený a ostrý dokument. Je to nový list?
         val fp = frame.fingerprint
         val previous = lastFingerprint
-        if (previous != null && fp != null && difference(fp, previous) < config.sameSheetDifference) {
+        val difference = if (previous != null && fp != null) difference(fp, previous) else null
+        if (difference != null && difference < config.sameSheetDifference) {
             phase = CapturePhase.WAITING_FOR_CHANGE
             changeSeen = false
-            return CaptureState(phase, sameAsLast = true) to false
+            return CaptureState(phase, sameAsLast = true, difference = difference) to false
         }
 
-        if (!autoEnabled) return CaptureState(phase, progress = 1f) to false
+        if (!autoEnabled || frame.timeMs - lastCaptureAt < config.minIntervalMs) {
+            return CaptureState(phase, progress = 1f, difference = difference) to false
+        }
 
         phase = CapturePhase.CAPTURING
-        return CaptureState(phase, progress = 1f) to true
+        lastCaptureAt = frame.timeMs
+        return CaptureState(phase, progress = 1f, difference = difference) to true
     }
 
     /** Volá sa po dokončení snímania (automatického aj ručného). */
-    fun onCaptured(quad: Quad?, fingerprint: FloatArray?) {
-        lastCapturedQuad = quad
+    fun onCaptured(fingerprint: FloatArray?) {
         lastFingerprint = fingerprint
         changeSeen = false
         anchor = null
@@ -138,7 +151,6 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
 
     /** Zabudne posledný nasnímaný list (napr. po zmazaní všetkých strán). */
     fun reset() {
-        lastCapturedQuad = null
         lastFingerprint = null
         changeSeen = true
         anchor = null

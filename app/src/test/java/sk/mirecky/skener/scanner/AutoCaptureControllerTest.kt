@@ -27,7 +27,7 @@ class AutoCaptureControllerTest {
             val (_, capture) = controller.onFrame(make(), auto)
             if (capture) {
                 captured = true
-                controller.onCaptured(make().quad, make().fingerprint)
+                controller.onCaptured(make().fingerprint)
             }
         }
         return captured
@@ -90,5 +90,19 @@ class AutoCaptureControllerTest {
 
     @Test fun differenceOfIdenticalFingerprintsIsZero() {
         assertEquals(0.0, AutoCaptureController.difference(sheetA, sheetA), 1e-9)
+    }
+
+    @Test fun briefDetectionDropoutIsNotSheetChange() {
+        assertTrue(run(1000) { frame() })
+        // Detekcia na jeden-dva snímky „blikne“ (zlý snímok), list sa nemení.
+        var i = 0
+        assertFalse(run(4000) { i++; frame(q = if (i % 20 == 0) null else quad) })
+    }
+
+    @Test fun flickeringFingerprintOfSameSheetIsNotCapturedAgain() {
+        assertTrue(run(1000) { frame(fp = sheetA) })
+        var i = 0
+        // Krátke výpadky detekcie bez pohybu; list je stále ten istý.
+        assertFalse(run(5000) { i++; frame(q = if (i % 15 < 2) null else quad, fp = sheetA) })
     }
 }

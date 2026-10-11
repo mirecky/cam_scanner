@@ -125,7 +125,7 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit)
     val view = LocalView.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val overlay by viewModel.overlay.collectAsStateWithLifecycle()
-    var showDebug by remember { mutableStateOf(false) }
+    var showDebug by remember { mutableStateOf(true) }
     val flash = remember { Animatable(0f) }
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -226,7 +226,8 @@ private fun StatusBar(state: ScannerUiState, debug: String?, onClick: () -> Unit
         if (debug != null) {
             Text(
                 debug,
-                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium,
                 color = Color.White.copy(alpha = 0.8f),
                 modifier = Modifier.padding(top = 4.dp),
             )

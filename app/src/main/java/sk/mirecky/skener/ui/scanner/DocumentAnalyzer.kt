@@ -22,6 +22,8 @@ class AnalysisResult(
     val fingerprint: FloatArray?,
     /** Pomer šírky a výšky vzpriameného analyzovaného obrazu. */
     val aspect: Double,
+    /** Dôvod zamietnutia posledného kandidáta (diagnostika), ak dokument nebol nájdený. */
+    val rejection: String?,
 )
 
 /**
@@ -33,19 +35,21 @@ class DocumentAnalyzer(
     private val onResult: (AnalysisResult) -> Unit,
 ) : ImageAnalysis.Analyzer {
 
-    private val detector = DocumentDetector()
+    private var lastRejection: String? = null
+    private val detector = DocumentDetector().apply { log = { lastRejection = it.substringAfter(": ", it) } }
     private val motionMeter = MotionMeter()
     private var rowBuffer = ByteArray(0)
 
     override fun analyze(image: ImageProxy) {
         try {
             val gray = toUprightGray(image)
+            lastRejection = null
             val detection = detector.detect(gray, mode())
             val motion = motionMeter.measure(gray)
             val fingerprint = detection?.let { ImageOps.fingerprint(gray, it.quad) }
             val aspect = gray.cols().toDouble() / gray.rows()
             gray.release()
-            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect))
+            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect, lastRejection))
         } finally {
             image.close()
         }

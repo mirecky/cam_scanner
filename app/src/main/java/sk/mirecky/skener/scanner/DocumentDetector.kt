@@ -14,8 +14,8 @@ import org.opencv.imgproc.Imgproc
 /** Výsledok detekcie v jednom snímku analýzy. */
 data class Detection(
     val quad: Quad,
-    /** Podiel obvodu štvoruholníka, ktorý leží na nájdených hranách (0..1). */
-    val edgeSupport: Double,
+    /** Najmenší kontrast (rozdiel jasu vnútri a vonku) spomedzi štyroch strán. */
+    val contrast: Double,
     /** Podiel plochy záberu, ktorý dokument zaberá (0..1). */
     val areaFraction: Double,
     /** Ostrosť: rozptyl Laplaceovho operátora vo vnútri dokumentu. */
@@ -29,8 +29,10 @@ data class DetectionCriteria(
     val maxSideRatio: Double,
     val minAngle: Double,
     val maxAngle: Double,
-    val minEdgeSupport: Double,
-    val minSideSupport: Double,
+    /** Minimálny rozdiel jasu vnútri a vonku pozdĺž každej strany (medián vzoriek). */
+    val minSideContrast: Double,
+    /** Či musí byť vnútro svetlejšie než okolie (papier); pri tabuli stačí absolútny rozdiel. */
+    val insideBrighter: Boolean,
     /** Minimálny priemerný jas vnútri (papier je svetlý); 0 = nekontroluje sa. */
     val minInsideBrightness: Double,
 ) {
@@ -39,13 +41,13 @@ data class DetectionCriteria(
             ScanMode.DOCUMENT -> DetectionCriteria(
                 minArea = 0.15, maxArea = 0.97, maxSideRatio = 2.0,
                 minAngle = 50.0, maxAngle = 130.0,
-                minEdgeSupport = 0.70, minSideSupport = 0.45,
+                minSideContrast = 12.0, insideBrighter = true,
                 minInsideBrightness = 115.0,
             )
             ScanMode.WHITEBOARD -> DetectionCriteria(
                 minArea = 0.20, maxArea = 0.98, maxSideRatio = 3.0,
                 minAngle = 45.0, maxAngle = 135.0,
-                minEdgeSupport = 0.65, minSideSupport = 0.40,
+                minSideContrast = 10.0, insideBrighter = false,
                 minInsideBrightness = 80.0,
             )
         }
@@ -63,9 +65,11 @@ data class DetectionCriteria(
  */
 class DocumentDetector {
 
+    /** Voliteľný záznam dôvodov zamietnutia kandidátov (na ladenie a testy). */
+    var log: ((String) -> Unit)? = null
+
     private val blurred = Mat()
     private val edges = Mat()
-    private val edgesWide = Mat()
     private val binary = Mat()
     private val kernel3 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
     private val kernel5 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
@@ -84,8 +88,6 @@ class DocumentDetector {
 
         Imgproc.Canny(blurred, edges, low, high)
         Imgproc.dilate(edges, edges, kernel3)
-        // Rozšírená mapa hrán na meranie podpory hrán (tolerancia niekoľkých pixelov).
-        Imgproc.dilate(edges, edgesWide, kernel5)
 
         val candidates = ArrayList<MatOfPoint>()
         candidates += contours(edges)
@@ -100,7 +102,7 @@ class DocumentDetector {
         for (contour in candidates) {
             val quad = toQuad(contour, w, h, criteria) ?: continue
             val detection = evaluate(quad, gray, w, h, criteria) ?: continue
-            val score = detection.areaFraction * detection.edgeSupport
+            val score = detection.areaFraction * minOf(detection.contrast, 60.0)
             if (score > bestScore) {
                 bestScore = score
                 best = detection
@@ -142,40 +144,36 @@ class DocumentDetector {
             if (p.size < 4) break
         }
         hull.release()
-        result ?: return null
+        if (result == null) {
+            log?.invoke("kontúra sa nedá aproximovať štvoruholníkom")
+            return null
+        }
 
         val aspect = w / h
-        if (!result.isConvex()) return null
         val area = result.area()
-        if (area < c.minArea || area > c.maxArea) return null
-        if (result.sideRatio(aspect) > c.maxSideRatio) return null
-        if (result.angles(aspect).any { it < c.minAngle || it > c.maxAngle }) return null
+        val reason = when {
+            !result.isConvex() -> "nekonvexný"
+            area < c.minArea || area > c.maxArea -> "plocha %.2f".format(area)
+            result.sideRatio(aspect) > c.maxSideRatio -> "pomer strán %.2f".format(result.sideRatio(aspect))
+            result.angles(aspect).any { it < c.minAngle || it > c.maxAngle } -> "uhly ${result.angles(aspect).map { it.toInt() }}"
+            else -> null
+        }
+        if (reason != null) {
+            log?.invoke("zamietnutý $result: $reason")
+            return null
+        }
         return result
     }
 
     private fun evaluate(quad: Quad, gray: Mat, w: Double, h: Double, c: DetectionCriteria): Detection? {
-        val corners = quad.corners
-        var total = 0
-        var hits = 0
-        for (i in 0 until 4) {
-            val a = corners[i]
-            val b = corners[(i + 1) % 4]
-            var sideHits = 0
-            for (s in 0 until SAMPLES_PER_SIDE) {
-                val t = (s + 0.5) / SAMPLES_PER_SIDE
-                val x = ((a.x + (b.x - a.x) * t) * w).toInt().coerceIn(0, edgesWide.cols() - 1)
-                val y = ((a.y + (b.y - a.y) * t) * h).toInt().coerceIn(0, edgesWide.rows() - 1)
-                if (edgesWide.get(y, x)[0] > 0) sideHits++
-            }
-            if (sideHits.toDouble() / SAMPLES_PER_SIDE < c.minSideSupport) return null
-            hits += sideHits
-            total += SAMPLES_PER_SIDE
+        val contrast = minSideContrast(quad, w, h, c.insideBrighter)
+        if (contrast < c.minSideContrast) {
+            log?.invoke("zamietnutý $quad: kontrast strany %.1f".format(contrast))
+            return null
         }
-        val support = hits.toDouble() / total
-        if (support < c.minEdgeSupport) return null
 
         val mask = Mat.zeros(gray.size(), CvType.CV_8UC1)
-        val poly = MatOfPoint(*corners.map { Point(it.x * w, it.y * h) }.toTypedArray())
+        val poly = MatOfPoint(*quad.corners.map { Point(it.x * w, it.y * h) }.toTypedArray())
         Imgproc.fillConvexPoly(mask, poly, Scalar(255.0))
         poly.release()
         // Zmenšenie masky, aby do merania nezasahoval okraj a pozadie.
@@ -183,6 +181,7 @@ class DocumentDetector {
 
         val inside = Core.mean(gray, mask).`val`[0]
         if (inside < c.minInsideBrightness) {
+            log?.invoke("zamietnutý $quad: jas vnútri %.0f".format(inside))
             mask.release()
             return null
         }
@@ -195,17 +194,64 @@ class DocumentDetector {
         val sharpness = std.toArray()[0].let { it * it }
         lap.release(); mean.release(); std.release(); mask.release()
 
-        return Detection(quad, support, quad.area(), sharpness)
+        return Detection(quad, contrast, quad.area(), sharpness)
+    }
+
+    /**
+     * Pre každú stranu porovná jas tesne vnútri a tesne vonku (vzorky po normále strany)
+     * a vráti najmenší z mediánov rozdielov. Skutočný okraj papiera má vnútri svetlejšie
+     * než vonku po celej dĺžke; vzor látky ani čiara vo vnútri listu túto podmienku nesplnia.
+     */
+    private fun minSideContrast(quad: Quad, w: Double, h: Double, insideBrighter: Boolean): Double {
+        val c = quad.corners.map { Pair(it.x * w, it.y * h) }
+        val cx = c.sumOf { it.first } / 4
+        val cy = c.sumOf { it.second } / 4
+        val maxX = blurred.cols() - 1
+        val maxY = blurred.rows() - 1
+        var worst = Double.MAX_VALUE
+        val diffs = DoubleArray(SAMPLES_PER_SIDE)
+        for (i in 0 until 4) {
+            val (ax, ay) = c[i]
+            val (bx, by) = c[(i + 1) % 4]
+            val len = kotlin.math.hypot(bx - ax, by - ay).coerceAtLeast(1e-6)
+            var nx = -(by - ay) / len
+            var ny = (bx - ax) / len
+            // Normála smerom von (od ťažiska).
+            val mx = (ax + bx) / 2
+            val my = (ay + by) / 2
+            if (nx * (mx - cx) + ny * (my - cy) < 0) { nx = -nx; ny = -ny }
+            var n = 0
+            for (s in 0 until SAMPLES_PER_SIDE) {
+                // Vzorky z vnútornej časti strany (bez rohov, kde sa okraje pretínajú).
+                val t = 0.1 + 0.8 * (s + 0.5) / SAMPLES_PER_SIDE
+                val px = ax + (bx - ax) * t
+                val py = ay + (by - ay) * t
+                val ix = (px - nx * CONTRAST_OFFSET).toInt()
+                val iy = (py - ny * CONTRAST_OFFSET).toInt()
+                val ox = (px + nx * CONTRAST_OFFSET).toInt()
+                val oy = (py + ny * CONTRAST_OFFSET).toInt()
+                if (ox !in 0..maxX || oy !in 0..maxY || ix !in 0..maxX || iy !in 0..maxY) continue
+                val d = blurred.get(iy, ix)[0] - blurred.get(oy, ox)[0]
+                diffs[n++] = if (insideBrighter) d else kotlin.math.abs(d)
+            }
+            // Strana pri okraji záberu (dokument presahuje záber) nemá vonkajšie vzorky.
+            if (n < SAMPLES_PER_SIDE / 2) return 0.0
+            val sorted = diffs.copyOf(n).also { it.sort() }
+            worst = minOf(worst, sorted[n / 2])
+        }
+        return worst
     }
 
     fun release() {
-        listOf(blurred, edges, edgesWide, binary, kernel3, kernel5).forEach { it.release() }
+        listOf(blurred, edges, binary, kernel3, kernel5).forEach { it.release() }
     }
 
     private companion object {
         const val CANNY_LOW = 20.0
         const val CANNY_HIGH = 60.0
         const val SAMPLES_PER_SIDE = 40
+        /** Vzdialenosť vzoriek od strany v pixeloch analyzovaného obrazu. */
+        const val CONTRAST_OFFSET = 6.0
         val EPSILONS = doubleArrayOf(0.02, 0.03, 0.04, 0.06)
     }
 }

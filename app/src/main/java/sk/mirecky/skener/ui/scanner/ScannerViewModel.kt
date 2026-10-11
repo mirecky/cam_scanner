@@ -138,10 +138,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             quad = detection?.quad,
             aspect = result.aspect,
             capture = state,
-            debug = detection?.let {
-                "ostrosť %.0f · hrany %.2f · plocha %.2f · pohyb %.1f"
-                    .format(it.sharpness, it.edgeSupport, it.areaFraction, result.motion)
-            } ?: "pohyb %.1f".format(result.motion),
+            debug = buildString {
+                if (detection != null) {
+                    append("kontrast %.0f · ostrosť %.0f · plocha %.2f".format(detection.contrast, detection.sharpness, detection.areaFraction))
+                } else {
+                    append("nenájdený")
+                    result.rejection?.let { append(" (").append(it).append(")") }
+                }
+                append("\npohyb %.1f · %s".format(result.motion, state.phase.name.lowercase()))
+                state.difference?.let { append(" · rozdiel od posl. %.3f".format(it)) }
+            },
         )
         if (trigger) {
             viewModelScope.launch(Dispatchers.Main) { takePicture(detection?.quad, result.fingerprint) }
@@ -179,7 +185,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                         }
                         if (!ok) original.copyTo(pageFile, overwrite = true)
                         pageStore.refresh()
-                        synchronized(auto) { auto.onCaptured(quad, fingerprint) }
+                        synchronized(auto) { auto.onCaptured(fingerprint) }
                         saving = false
                         setTransientStatus(ScanStatus.CAPTURED, resetAfterMs = 1_500)
                     }
@@ -217,7 +223,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private companion object {
         const val TAG = "ScannerViewModel"
         /** Minimálna ostrosť (rozptyl Laplaceovho operátora); predbežná hodnota, ladí sa na zariadení. */
-        const val MIN_SHARPNESS = 20.0
+        const val MIN_SHARPNESS = 100.0
         const val RECENT_MS = 500L
     }
 }

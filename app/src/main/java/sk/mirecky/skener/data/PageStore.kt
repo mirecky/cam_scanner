@@ -13,10 +13,11 @@ import java.io.File
 
 /**
  * Strana rozpracovaného dokumentu. [cacheKey] sa mení pri každej zmene obsahu súboru,
- * aby sa v náhľadoch nezobrazoval starý obrázok z vyrovnávacej pamäte.
+ * aby sa v náhľadoch nezobrazoval starý obrázok z vyrovnávacej pamäte. Kľúč je súčasťou
+ * rovnosti, inak by StateFlow zmenu (otočenie, presun) považoval za nezmenený zoznam a neoznámil ju.
  */
-data class Page(val file: File) {
-    val cacheKey: String = "${file.path}:${file.lastModified()}:${file.length()}"
+data class Page(val file: File, val cacheKey: String) {
+    constructor(file: File) : this(file, "${file.path}:${file.lastModified()}:${file.length()}")
 }
 
 /**
@@ -99,7 +100,7 @@ class PageStore(context: Context) {
             .orEmpty()
             .sortedBy { it.name }
 
-    private fun scan(): List<Page> = files().map(::Page)
+    private fun scan(): List<Page> = files().map { Page(it) }
 
     private fun indexOf(file: File): Int? =
         file.name.removePrefix(PREFIX).removeSuffix(SUFFIX).toIntOrNull()
