@@ -76,12 +76,13 @@ object ImageOps {
      * Ak je zadaný [snapRatio] a nameraný pomer strán sa od neho líši najviac o [SNAP_TOLERANCE],
      * výstup sa prispôsobí presne tomuto pomeru (napr. A4), čím sa odstráni skreslenie z perspektívy.
      */
-    fun cropDocument(src: Mat, quad: Quad, snapRatio: Double? = null): Mat {
+    fun cropDocument(src: Mat, quad: Quad, snapRatio: Double? = null, inset: Double = 0.0): Mat {
         val w = src.cols().toDouble()
         val h = src.rows().toDouble()
         fun d(a: Pt, b: Pt) = hypot((a.x - b.x) * w, (a.y - b.y) * h)
         var outW = max(d(quad.tl, quad.tr), d(quad.bl, quad.br))
         var outH = max(d(quad.tl, quad.bl), d(quad.tr, quad.br))
+        val target = if (inset > 0) insetQuad(quad, inset) else quad
         if (snapRatio != null) {
             val portrait = outH >= outW
             val measured = if (portrait) outH / outW else outW / outH
@@ -91,10 +92,18 @@ object ImageOps {
             }
         }
         return warp(
-            src, quad,
+            src, target,
             outW.roundToInt().coerceAtLeast(1), outH.roundToInt().coerceAtLeast(1),
             Imgproc.INTER_CUBIC,
         )
+    }
+
+    /** Posunie rohy o [fraction] smerom k ťažisku (odreže tmavý okraj podkladu na hrane papiera). */
+    private fun insetQuad(q: Quad, fraction: Double): Quad {
+        val cx = q.corners.sumOf { it.x } / 4
+        val cy = q.corners.sumOf { it.y } / 4
+        fun p(pt: Pt) = Pt(pt.x + (cx - pt.x) * fraction * 2, pt.y + (cy - pt.y) * fraction * 2)
+        return Quad(p(q.tl), p(q.tr), p(q.br), p(q.bl))
     }
 
     /** Najväčšia relatívna odchýlka nameraného pomeru strán, pri ktorej sa ešte prispôsobí formátu. */
