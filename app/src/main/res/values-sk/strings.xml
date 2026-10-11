@@ -103,6 +103,17 @@
     <string name="crop_invalid">Rohy sa krížia, posuň ich do správneho tvaru.</string>
     <string name="retake_hint">Prefotenie strany – ťuknutím zrušíš</string>
 
+    <string name="action_pages_short">Strany</string>
+    <string name="page_deleted">Strana %d zmazaná</string>
+    <string name="action_undo">Späť</string>
+    <string name="action_select">Vybrať</string>
+    <plurals name="pages_deleted">
+        <item quantity="one">Zmazaná %d strana</item>
+        <item quantity="few">Zmazané %d strany</item>
+        <item quantity="many">Zmazané %d strany</item>
+        <item quantity="other">Zmazaných %d strán</item>
+    </plurals>
+
     <plurals name="page_count">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>

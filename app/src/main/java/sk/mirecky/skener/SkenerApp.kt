@@ -16,6 +16,12 @@ class SkenerApp : Application() {
     /** Rozsah pre operácie, ktoré nesmú skončiť odchodom z obrazovky (mazanie, filtre, presuny). */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /**
+     * Spoločný stav hlášok so „Späť“: hláška sa spúšťa v rozsahu aplikácie, takže vydrží
+     * aj prechod medzi obrazovkami (napr. zmazanie poslednej zobrazenej strany).
+     */
+    val snackbar = androidx.compose.material3.SnackbarHostState()
+
     override fun onCreate() {
         super.onCreate()
         if (!OpenCVLoader.initLocal()) Log.e("SkenerApp", "OpenCV sa nepodarilo načítať")

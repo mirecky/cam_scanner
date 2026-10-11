@@ -1,6 +1,16 @@
 package sk.mirecky.skener.ui.editor
 
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -86,6 +96,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import sk.mirecky.skener.R
 import sk.mirecky.skener.SkenerApp
@@ -140,6 +151,7 @@ fun EditorScreen(
     var tool by rememberSaveable { mutableStateOf<Tool?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val snackbar = app.snackbar
 
     LaunchedEffect(pages.size) {
         if (pagerState.currentPage > pages.lastIndex) pagerState.scrollToPage(pages.lastIndex)
@@ -195,7 +207,11 @@ fun EditorScreen(
                     color = if (docId in exporting) SkenerColors.Accent else SkenerColors.Muted,
                 )
             }
-            IconButton(onClick = { onOpenOverview(docId) }) { Icon(Icons.Outlined.GridView, stringResource(R.string.action_overview)) }
+            TextButton(onClick = { onOpenOverview(docId) }, contentPadding = PaddingValues(horizontal = 10.dp)) {
+                Icon(Icons.Outlined.GridView, null, tint = SkenerColors.Text, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.action_pages_short), color = SkenerColors.Text, style = MaterialTheme.typography.labelLarge)
+            }
             IconButton(onClick = { sharePdf(context, doc) }) { Icon(Icons.Outlined.Share, stringResource(R.string.action_share)) }
         }
 
@@ -239,6 +255,7 @@ fun EditorScreen(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
                     )
                 }
+                SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
                 if (busy) {
                     CircularProgressIndicator(
                         Modifier.align(Alignment.TopEnd).padding(12.dp).size(20.dp),
@@ -256,6 +273,15 @@ fun EditorScreen(
                 current = current,
                 onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
                 onAdd = { onAddPages(docId) },
+                onReorder = { order ->
+                    val currentId = page.id
+                    app.scope.launch {
+                        repository.reorder(docId, order)
+                        // Editor ostane na tej istej strane, aj keď sa posunula.
+                        val newIndex = order.indexOf(currentId)
+                        if (newIndex >= 0) scope.launch { pagerState.scrollToPage(newIndex) }
+                    }
+                },
             )
             Tool.FILTER -> FilterPanel(
                 thumbnails = thumbnails,
@@ -302,7 +328,27 @@ fun EditorScreen(
                 ToolButton(Icons.Outlined.TextFields, R.string.tool_text, upcoming = true) {
                     Toast.makeText(context, R.string.tool_upcoming, Toast.LENGTH_SHORT).show()
                 }
-                ToolButton(Icons.Outlined.Delete, R.string.action_delete) { confirmDelete = true }
+                ToolButton(Icons.Outlined.Delete, R.string.action_delete) {
+                    if (pages.size == 1) {
+                        // Posledná strana: zmizol by celý dokument, preto potvrdenie.
+                        confirmDelete = true
+                    } else {
+                        val number = current + 1
+                        val id = page.id
+                        app.scope.launch {
+                            val removed = repository.deletePages(docId, setOf(id))
+                            // Časový limit: bez zobrazenej hlášky (odchod z obrazovky) sa nečaká donekonečna.
+                            val result = withTimeoutOrNull(UNDO_WINDOW_MS) {
+                                snackbar.showSnackbar(
+                                    message = context.getString(R.string.page_deleted, number),
+                                    actionLabel = context.getString(R.string.action_undo),
+                                    duration = SnackbarDuration.Long,
+                                )
+                            }
+                            if (result == SnackbarResult.ActionPerformed) repository.restorePages(docId, removed)
+                        }
+                    }
+                }
             }
         }
 
@@ -381,35 +427,74 @@ private fun PageChip(index: Int, count: Int, onPrev: () -> Unit, onNext: () -> U
     }
 }
 
+/**
+ * Pás náhľadov: ťuknutie = prejsť na stranu, podržanie a ťahanie = presunúť stranu,
+ * „+“ = pridať ďalšie strany.
+ */
 @Composable
-private fun ThumbnailStrip(pages: List<PageItem>, current: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
+private fun ThumbnailStrip(
+    pages: List<PageItem>,
+    current: Int,
+    onSelect: (Int) -> Unit,
+    onAdd: () -> Unit,
+    onReorder: (List<String>) -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    var order by remember { mutableStateOf(pages) }
+    var dragging by remember { mutableStateOf(false) }
+    var startOrder by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(pages) { if (!dragging) order = pages }
     val listState = rememberLazyListState()
-    LaunchedEffect(current) { listState.animateScrollToItem(current) }
+    LaunchedEffect(current) { if (!dragging) listState.animateScrollToItem(current) }
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        // Položka „+“ na konci sa nepresúva.
+        if (from.index < order.size && to.index < order.size) {
+            order = order.toMutableList().apply { add(to.index, removeAt(from.index)) }
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
     LazyRow(
         state = listState,
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth().background(SkenerColors.Panel),
     ) {
-        itemsIndexed(pages, key = { _, p -> p.id }) { index, p ->
-            val selected = index == current
-            Box(
-                Modifier
-                    .width(46.dp)
-                    .aspectRatio(1f / 1.414f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .border(2.dp, if (selected) SkenerColors.Accent else Color.Transparent, RoundedCornerShape(4.dp))
-                    .clickable { onSelect(index) },
-            ) {
-                PageImage(p, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                Text(
-                    "${index + 1}",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.BottomStart).background(SkenerColors.Ink.copy(alpha = 0.85f)).padding(horizontal = 4.dp),
-                )
+        itemsIndexed(order, key = { _, p -> p.id }) { index, p ->
+            ReorderableItem(reorderState, key = p.id) { isDragging ->
+                val selected = p.id == pages.getOrNull(current)?.id
+                val scale by animateFloatAsState(if (isDragging) 1.15f else 1f, label = "lift")
+                Box(
+                    Modifier
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        .shadow(if (isDragging) 10.dp else 0.dp, RoundedCornerShape(4.dp))
+                        .width(46.dp)
+                        .aspectRatio(1f / 1.414f)
+                        .clip(RoundedCornerShape(4.dp))
+                        .border(2.dp, if (selected || isDragging) SkenerColors.Accent else Color.Transparent, RoundedCornerShape(4.dp))
+                        .clickable { onSelect(pages.indexOfFirst { it.id == p.id }.coerceAtLeast(0)) }
+                        .longPressDraggableHandle(
+                            onDragStarted = {
+                                dragging = true
+                                startOrder = order.map { it.id }
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDragStopped = {
+                                dragging = false
+                                val ids = order.map { it.id }
+                                if (ids != startOrder) onReorder(ids)
+                            },
+                        ),
+                ) {
+                    PageImage(p, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    Text(
+                        "${index + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.BottomStart).background(SkenerColors.Ink.copy(alpha = 0.85f)).padding(horizontal = 4.dp),
+                    )
+                }
             }
         }
-        item {
+        item(key = "add") {
             Box(
                 Modifier
                     .width(46.dp)
@@ -544,6 +629,9 @@ private fun AdjustRow(label: Int, value: Int, onChange: (Int) -> Unit) {
         )
     }
 }
+
+/** Ako dlho sa ponúka „Späť“ po zmazaní strany (repozitár drží súbory o chvíľu dlhšie). */
+internal const val UNDO_WINDOW_MS = 7_000L
 
 /** Oneskorenie prepočtu strany v plnom rozlíšení po poslednej zmene. */
 private const val COMMIT_DELAY_MS = 700L

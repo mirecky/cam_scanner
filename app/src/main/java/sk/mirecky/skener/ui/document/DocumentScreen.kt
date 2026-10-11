@@ -26,6 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarResult
+import kotlinx.coroutines.withTimeoutOrNull
+import sk.mirecky.skener.ui.editor.UNDO_WINDOW_MS
+import sk.mirecky.skener.ui.theme.SkenerColors
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.AutoFixHigh
@@ -99,28 +106,51 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
     if (doc == null) return
 
     var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    // Režim výberu sa dá zapnúť aj tlačidlom „Vybrať“ (bez podržania strany).
+    var selectMode by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Set<String>?>(null) }
     var renaming by remember { mutableStateOf(false) }
-    val selecting = selected.isNotEmpty()
+    val selecting = selectMode || selected.isNotEmpty()
+    fun endSelection() {
+        selected = emptySet()
+        selectMode = false
+    }
+    fun deleteWithUndo(ids: Set<String>) {
+        endSelection()
+        app.scope.launch {
+            val removed = repository.deletePages(docId, ids)
+            val result = withTimeoutOrNull(UNDO_WINDOW_MS) {
+                app.snackbar.showSnackbar(
+                    message = context.resources.getQuantityString(R.plurals.pages_deleted, ids.size, ids.size),
+                    actionLabel = context.getString(R.string.action_undo),
+                    duration = SnackbarDuration.Long,
+                )
+            }
+            if (result == SnackbarResult.ActionPerformed) repository.restorePages(docId, removed)
+        }
+    }
 
     run {
-        BackHandler { if (selecting) selected = emptySet() else onBack() }
+        BackHandler { if (selecting) endSelection() else onBack() }
         Scaffold(
             topBar = {
                 if (selecting) {
                     TopAppBar(
                         title = { Text(stringResource(R.string.selected_count, selected.size)) },
                         navigationIcon = {
-                            IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Filled.Close, stringResource(R.string.action_cancel)) }
+                            IconButton(onClick = ::endSelection) { Icon(Icons.Filled.Close, stringResource(R.string.action_cancel)) }
                         },
                         actions = {
                             IconButton(onClick = { selected = doc.pages.map { it.id }.toSet() }) {
                                 Icon(Icons.Outlined.SelectAll, stringResource(R.string.action_select_all))
                             }
-                            IconButton(onClick = { app.scope.launch { repository.rotate(docId, selected) } }) {
+                            IconButton(onClick = { app.scope.launch { repository.rotate(docId, selected) } }, enabled = selected.isNotEmpty()) {
                                 Icon(Icons.Outlined.RotateRight, stringResource(R.string.action_rotate))
                             }
-                            IconButton(onClick = { confirmDelete = selected }) {
+                            IconButton(
+                                onClick = { if (selected.size >= doc.pages.size) confirmDelete = selected else deleteWithUndo(selected) },
+                                enabled = selected.isNotEmpty(),
+                            ) {
                                 Icon(Icons.Outlined.Delete, stringResource(R.string.action_delete))
                             }
                         },
@@ -142,11 +172,13 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
                         },
                         actions = {
+                            TextButton(onClick = { selectMode = true }) { Text(stringResource(R.string.action_select)) }
                             IconButton(onClick = { sharePdf(context, doc) }) { Icon(Icons.Outlined.Share, stringResource(R.string.action_share)) }
                         },
                     )
                 }
             },
+            snackbarHost = { SnackbarHost(app.snackbar) },
             bottomBar = {
                 if (!selecting) {
                     BottomAppBar {
@@ -163,6 +195,7 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
             PageGrid(
                 doc = doc,
                 selected = selected,
+                selecting = selecting,
                 onToggle = { id -> selected = if (id in selected) selected - id else selected + id },
                 onOpen = onOpenPage,
                 onReorder = { order -> app.scope.launch { repository.reorder(docId, order) } },
@@ -181,7 +214,7 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = null
-                    selected = emptySet()
+                    endSelection()
                     app.scope.launch { repository.deletePages(docId, ids) }
                 }) { Text(stringResource(R.string.action_delete)) }
             },
@@ -210,6 +243,7 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
 private fun PageGrid(
     doc: DocumentItem,
     selected: Set<String>,
+    selecting: Boolean,
     onToggle: (String) -> Unit,
     onOpen: (Int) -> Unit,
     onReorder: (List<String>) -> Unit,
@@ -244,13 +278,13 @@ private fun PageGrid(
                     page = page,
                     number = index + 1,
                     selected = page.id in selected,
-                    selecting = selected.isNotEmpty(),
+                    selecting = selecting,
                     modifier = Modifier
                         .graphicsLayer { scaleX = scale; scaleY = scale }
                         .shadow(if (isDragging) 12.dp else 0.dp, RoundedCornerShape(8.dp))
                         .clickable {
                             if (System.currentTimeMillis() < suppressClickUntil) return@clickable
-                            if (selected.isNotEmpty()) onToggle(page.id) else onOpen(index)
+                            if (selecting) onToggle(page.id) else onOpen(index)
                         }
                         .longPressDraggableHandle(
                             onDragStarted = {
@@ -290,6 +324,15 @@ private fun PageTile(page: PageItem, number: Int, selected: Boolean, selecting: 
             modifier = Modifier.align(Alignment.BottomStart),
         ) {
             Text(number.toString(), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+        }
+        if (!selecting) {
+            // Úchyt naznačuje, že stranu možno podržať a presunúť.
+            Icon(
+                Icons.Filled.DragIndicator,
+                contentDescription = null,
+                tint = SkenerColors.Muted,
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).background(SkenerColors.Ink.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(2.dp),
+            )
         }
         if (selecting) {
             Icon(

@@ -99,6 +99,15 @@
     <string name="crop_invalid">Corners cross each other, move them into a proper shape.</string>
     <string name="retake_hint">Retaking a page – tap to cancel</string>
 
+    <string name="action_pages_short">Pages</string>
+    <string name="page_deleted">Page %d deleted</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_select">Select</string>
+    <plurals name="pages_deleted">
+        <item quantity="one">%d page deleted</item>
+        <item quantity="other">%d pages deleted</item>
+    </plurals>
+
     <plurals name="page_count">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>

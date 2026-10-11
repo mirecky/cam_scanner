@@ -87,15 +87,37 @@ class DocumentRepository(private val context: Context) {
         if (document(slot.docId) == null && otherPages.isEmpty()) docDir.deleteRecursively()
     }
 
-    suspend fun deletePages(docId: String, pageIds: Set<String>) {
-        val doc = document(docId) ?: return
+    /**
+     * Odstráni strany z dokumentu. Súbory strán ostanú ešte [UNDO_MS] na disku, aby sa zmazanie
+     * dalo vrátiť cez [restorePages]. Ak by dokument ostal prázdny, zmaže sa celý (bez možnosti vrátenia).
+     * Vráti odstránené strany s ich pôvodnými pozíciami (pre „Späť“).
+     */
+    suspend fun deletePages(docId: String, pageIds: Set<String>): List<Pair<Int, PageItem>> {
+        val doc = document(docId) ?: return emptyList()
         val remaining = doc.pages.filterNot { it.id in pageIds }
         if (remaining.isEmpty()) {
             deleteDocuments(setOf(docId))
-            return
+            return emptyList()
         }
+        val removed = doc.pages.withIndex().filter { it.value.id in pageIds }.map { it.index to it.value }
         modify(docId) { it.copy(pages = remaining) }
-        withContext(Dispatchers.IO) { doc.pages.filter { it.id in pageIds }.forEach { it.dir.deleteRecursively() } }
+        scope.launch {
+            delay(UNDO_MS)
+            val stillGone = document(docId)?.pages?.map { it.id }?.toSet() ?: emptySet()
+            removed.filter { it.second.id !in stillGone }.forEach { it.second.dir.deleteRecursively() }
+        }
+        return removed
+    }
+
+    /** Vráti zmazané strany na ich pôvodné pozície (ak ich súbory ešte existujú). */
+    suspend fun restorePages(docId: String, removed: List<Pair<Int, PageItem>>) {
+        val restorable = removed.filter { it.second.displayFile.exists() }.sortedBy { it.first }
+        if (restorable.isEmpty()) return
+        modify(docId) { d ->
+            val list = d.pages.toMutableList()
+            restorable.forEach { (index, page) -> if (list.none { it.id == page.id }) list.add(index.coerceIn(0, list.size), page) }
+            d.copy(pages = list)
+        }
     }
 
     /** Nastaví nové poradie strán (zoznam ID v novom poradí). */
@@ -296,5 +318,7 @@ class DocumentRepository(private val context: Context) {
     private companion object {
         const val TAG = "DocumentRepository"
         const val PDF_DEBOUNCE_MS = 1_500L
+        /** Ako dlho sa dá zmazanie strán vrátiť. */
+        const val UNDO_MS = 8_000L
     }
 }
