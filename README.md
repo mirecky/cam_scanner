@@ -6,9 +6,8 @@ Podrobný rozsah: [docs/SPEC.md](docs/SPEC.md).
 
 ## Inštalácia
 
-1. Na GitHube otvor záložku **Actions** → posledný úspešný beh **Zostavenie APK**.
-2. V časti **Artifacts** stiahni `Skener-0.1.N` (ZIP s APK).
-3. V telefóne rozbaľ ZIP a otvor APK (pri prvej inštalácii povoľ inštaláciu z neznámych zdrojov pre aplikáciu, ktorou súbor otváraš).
+1. V telefóne otvor https://github.com/mirecky/cam_scanner/releases/tag/najnovsie a stiahni súbor `Skener-0.1.N.apk`.
+2. Otvor stiahnutý APK a potvrď inštaláciu. Pri prvej inštalácii treba povoliť inštaláciu z neznámych zdrojov pre prehliadač.
 
 ## Podpisový kľúč
 

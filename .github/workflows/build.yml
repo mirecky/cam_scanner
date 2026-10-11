@@ -8,6 +8,9 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,3 +52,16 @@ jobs:
           name: Skener-0.1.${{ github.run_number }}
           path: Skener-0.1.${{ github.run_number }}.apk
           retention-days: 30
+
+      - name: Zverejnenie APK ako vydanie „najnovsie“
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="Skener-0.1.${{ github.run_number }}.apk"
+          gh release delete najnovsie --yes --cleanup-tag || true
+          gh release create najnovsie "$APK" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Skener 0.1.${{ github.run_number }}" \
+            --notes "Automatické zostavenie z commitu ${{ github.sha }}."
