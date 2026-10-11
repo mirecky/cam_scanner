@@ -49,7 +49,8 @@ Kandidát na dokument sa akceptuje, len ak spĺňa všetky tieto podmienky:
 
 - konvexný štvoruholník,
 - plocha v stanovenom rozsahu podielu záberu (predbežne 20–98 %),
-- pomer strán po korekcii perspektívy zodpovedajúci režimu (pre A4 približne 1 : 1,414 s toleranciou),
+- pomer strán po korekcii perspektívy zodpovedajúci režimu (dokument: 1,15–1,75 okolo A4 = 1,414; tabuľa: 1,0–3,0),
+- v režime dokument orientácia na výšku (ochrana pred obrazovkami, televízormi a obrazmi, ktoré bývajú na šírku),
 - vnútorné uhly v prijateľnom rozsahu (vylúčenie extrémne skosených tvarov),
 - dostatočný kontrast hrany voči pozadiu: pozdĺž každej strany je vnútri svetlejšie než vonku (odolné voči vzorovaným podkladom),
 - dostatočná ostrosť obrazu (napr. rozptyl Laplaceovho operátora nad prahom).

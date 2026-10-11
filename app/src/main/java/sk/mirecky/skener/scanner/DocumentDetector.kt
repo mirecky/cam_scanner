@@ -26,7 +26,13 @@ data class Detection(
 data class DetectionCriteria(
     val minArea: Double,
     val maxArea: Double,
+    val minSideRatio: Double,
     val maxSideRatio: Double,
+    /**
+     * Prijímať len dokumenty orientované na výšku. List A4 skenovaný telefónom na výšku leží
+     * takmer vždy na výšku; obrazovky, televízory a obrazy bývajú na šírku (ochrana pred falošnými nálezmi).
+     */
+    val portraitOnly: Boolean,
     val minAngle: Double,
     val maxAngle: Double,
     /** Minimálny rozdiel jasu vnútri a vonku pozdĺž každej strany (medián vzoriek). */
@@ -41,13 +47,13 @@ data class DetectionCriteria(
     companion object {
         fun forMode(mode: ScanMode) = when (mode) {
             ScanMode.DOCUMENT -> DetectionCriteria(
-                minArea = 0.15, maxArea = 0.97, maxSideRatio = 2.0,
+                minArea = 0.15, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.75, portraitOnly = true,
                 minAngle = 50.0, maxAngle = 130.0,
                 minSideContrast = 12.0, insideBrighter = true, preferA4 = true,
                 minInsideBrightness = 115.0,
             )
             ScanMode.WHITEBOARD -> DetectionCriteria(
-                minArea = 0.20, maxArea = 0.98, maxSideRatio = 3.0,
+                minArea = 0.20, maxArea = 0.98, minSideRatio = 1.0, maxSideRatio = 3.0, portraitOnly = false,
                 minAngle = 45.0, maxAngle = 135.0,
                 minSideContrast = 10.0, insideBrighter = false, preferA4 = false,
                 minInsideBrightness = 80.0,
@@ -162,7 +168,8 @@ class DocumentDetector {
         val reason = when {
             !result.isConvex() -> "nekonvexný"
             area < c.minArea || area > c.maxArea -> "plocha %.2f".format(area)
-            result.sideRatio(aspect) > c.maxSideRatio -> "pomer strán %.2f".format(result.sideRatio(aspect))
+            result.sideRatio(aspect) !in c.minSideRatio..c.maxSideRatio -> "pomer strán %.2f".format(result.sideRatio(aspect))
+            c.portraitOnly && !result.isPortrait(aspect) -> "na šírku"
             result.angles(aspect).any { it < c.minAngle || it > c.maxAngle } -> "uhly ${result.angles(aspect).map { it.toInt() }}"
             else -> null
         }

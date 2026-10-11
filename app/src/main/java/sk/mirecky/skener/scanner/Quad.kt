@@ -47,6 +47,12 @@ data class Quad(val tl: Pt, val tr: Pt, val br: Pt, val bl: Pt) {
         return max(w, h) / maxOf(minOf(w, h), 1e-9)
     }
 
+    /** Či je štvoruholník orientovaný na výšku (priemer zvislých strán ≥ priemer vodorovných). */
+    fun isPortrait(aspect: Double): Boolean {
+        fun d(a: Pt, b: Pt) = hypot((a.x - b.x) * aspect, a.y - b.y)
+        return (d(tl, bl) + d(tr, br)) >= (d(tl, tr) + d(bl, br))
+    }
+
     /** Vnútorné uhly v stupňoch. */
     fun angles(aspect: Double): List<Double> {
         val c = corners.map { Pt(it.x * aspect, it.y) }
