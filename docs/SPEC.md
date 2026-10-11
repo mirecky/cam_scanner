@@ -1,6 +1,6 @@
 # Špecifikácia aplikácie Skener dokumentov
 
-Verzia dokumentu: 1.0 (návrh na schválenie)
+Verzia dokumentu: 1.1 (schválený rozsah fázy 1, doplnené AI funkcie fázy 2)
 Dátum: 11. 10. 2026
 
 ## 1. Účel a kontext
@@ -18,7 +18,8 @@ Primárny scenár použitia je postupné skenovanie väčšieho počtu listov fo
 
 Z uvedeného vyplývajú tieto princípy návrhu:
 
-- plne offline spracovanie, žiadne reklamy, žiadna telemetria, žiadny cloud tretej strany,
+- plne offline spracovanie jadra (snímanie, OCR, PDF); cloudové AI len ako voliteľná nadstavba spúšťaná používateľom (kap. 4.1),
+- žiadne reklamy, žiadna telemetria, žiadny cloud tretej strany,
 - minimálny rozsah povolení,
 - prísne overovanie kandidáta na dokument pred automatickým nasnímaním,
 - OCR ako štandardná súčasť, nie platená nadstavba.
@@ -128,15 +129,37 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 
 ## 4. Mimo rozsahu fázy 1
 
-**Fáza 2:** knižnica dokumentov s fulltextovým vyhľadávaním v texte z OCR, kopírovanie a export textu (TXT, prípadne DOCX), export strán ako JPG/PNG.
+**Fáza 2:** knižnica dokumentov s fulltextovým vyhľadávaním v texte z OCR, kopírovanie a export textu (TXT), export strán ako JPG/PNG, voliteľné AI funkcie podľa kap. 4.1.
 
 **Fáza 3:** režim kniha (rozdelenie dvojstrany), režim preukaz (obe strany karty na jednu stranu A4), podpis, anotácie, retuš škvŕn.
 
-**Vylúčené:** ovládanie tlačidlami hlasitosti, cloudové služby v aplikácii, reklamy, analytika.
+**Vylúčené:** ovládanie tlačidlami hlasitosti, cloudové úložiská v aplikácii (synchronizáciu zabezpečuje externe aplikácia MEGA), reklamy, analytika.
+
+### 4.1 AI funkcie (fáza 2)
+
+**Zásady:**
+
+- AI funkcie sú voliteľné a spúšťajú sa výlučne výslovným pokynom používateľa nad konkrétnym dokumentom. Nikdy sa nespúšťajú automaticky ani hromadne na pozadí.
+- Snímanie, OCR a tvorba vyhľadávateľného PDF zostávajú plne lokálne. Textová vrstva PDF pochádza vždy z lokálneho OCR, nie z AI.
+- Komunikácia prebieha s Claude API pomocou vlastného API kľúča používateľa, uloženého šifrovane (Android Keystore).
+- Výstup AI sa pred uložením vždy zobrazí na kontrolu a úpravu. Pôvodný sken sa nikdy neprepisuje.
+- Pri čísliciach a sumách (najmä pri tabuľkách) sa používateľovi zobrazí upozornenie na povinnú kontrolu voči originálu.
+
+| ID | Funkcia | Výstup |
+|---|---|---|
+| AI1 | Prepis rukopisu a tabule | textový prepis uložený ako samostatný súbor (TXT/DOCX) vedľa PDF |
+| AI2 | Návrh názvu súboru podľa obsahu (napr. `2026-10-11_Faktura_Orange.pdf`) | návrh názvu, ktorý používateľ potvrdí alebo upraví; bez potvrdenia platí predvolený názov podľa F8 |
+| AI3 | Prevod dokumentu do formátu Word | DOCX so zachovanou štruktúrou (nadpisy, odseky, zoznamy, tabuľky) |
+| AI4 | Prevod tabuliek do formátu Excel | XLSX, jedna tabuľka na hárok, číselné bunky ako čísla (nie text) |
+| AI5 | Vyťahovanie údajov podľa šablóny | štruktúrované polia (napr. faktúra: dodávateľ, číslo, dátum vystavenia a splatnosti, suma, IBAN, variabilný symbol); zobrazenie, kopírovanie, pripojenie riadku do zvoleného súboru XLSX |
+
+**Technický princíp AI3–AI5:** AI nevracia hotový súbor. Vracia štruktúrované údaje (JSON podľa pevnej schémy) a súbory DOCX a XLSX z nich zostavuje aplikácia lokálne. Formát výstupu je tak vždy platný a pod kontrolou aplikácie. AI pracuje s obrazom strany aj s textom z lokálneho OCR, čo znižuje riziko chybného prečítania.
+
+**Dôsledok pre povolenia:** zavedením AI funkcií pribudne povolenie `INTERNET`, ktoré sa využíva výhradne na komunikáciu s AI API. Až do nastavenia API kľúča aplikácia nevykonáva žiadnu sieťovú komunikáciu.
 
 ## 5. Nefunkčné požiadavky
 
-- **Súkromie:** žiadne sieťové povolenie (`INTERNET` sa nedeklaruje). Povolenia: `CAMERA`, `POST_NOTIFICATIONS`.
+- **Súkromie:** vo fáze 1 žiadne sieťové povolenie (`INTERNET` sa nedeklaruje). Povolenia: `CAMERA`, `POST_NOTIFICATIONS`. Vo fáze 2 pribudne `INTERNET` výhradne pre AI funkcie (kap. 4.1).
 - **Výkon:** detekcia v reálnom čase bez zasekávania náhľadu; OCR jednej strany A4 cieľovo do 3 s na S25 Ultra.
 - **Spoľahlivosť:** nasnímané strany sa ukladajú priebežne, takže pád aplikácie ani jej ukončenie systémom nespôsobia stratu práce.
 - **Kvalita výstupu:** text čitateľný pri tlači A4; veľkosť PDF pri štandardnej kvalite cieľovo do 300 kB na stranu.
