@@ -11,7 +11,9 @@
     <string name="mode_whiteboard">Tabuľa</string>
 
     <string name="status_searching">Hľadám dokument</string>
-    <string name="status_manual">Ručné snímanie</string>
+    <string name="status_hold_still">Dokument nájdený – drž, snímam</string>
+    <string name="status_ready_manual">Dokument nájdený – stlač spúšť</string>
+    <string name="status_same_sheet">Nasnímané – polož ďalší list</string>
     <string name="status_saving">Snímam…</string>
     <string name="status_captured">Nasnímané – polož ďalší list</string>
     <string name="status_error">Snímanie zlyhalo</string>

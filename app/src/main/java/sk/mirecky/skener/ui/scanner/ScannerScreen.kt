@@ -8,7 +8,15 @@ import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.util.Size
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import java.util.concurrent.Executors
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.view.CameraController
@@ -116,25 +124,63 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit)
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = LocalView.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val overlay by viewModel.overlay.collectAsStateWithLifecycle()
+    var showDebug by remember { mutableStateOf(false) }
+    val flash = remember { Animatable(0f) }
 
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val controller = remember {
         val ratio4to3 = ResolutionSelector.Builder()
             .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
             .build()
+        val analysisSize = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+            .setResolutionStrategy(
+                ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+            )
+            .build()
         LifecycleCameraController(context).apply {
-            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE or CameraController.IMAGE_ANALYSIS)
             imageCaptureMode = ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
             previewResolutionSelector = ratio4to3
             imageCaptureResolutionSelector = ratio4to3
+            imageAnalysisResolutionSelector = analysisSize
+            imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+            setImageAnalysisAnalyzer(
+                analysisExecutor,
+                DocumentAnalyzer(mode = { viewModel.currentMode }, onResult = viewModel::onAnalysis),
+            )
             bindToLifecycle(lifecycleOwner)
+        }
+    }
+    DisposableEffect(controller) {
+        viewModel.attachCamera(controller)
+        onDispose {
+            viewModel.attachCamera(null)
+            controller.clearImageAnalysisAnalyzer()
+            analysisExecutor.shutdown()
+        }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.captureEvents.collect {
+            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            flash.snapTo(0.8f)
+            flash.animateTo(0f, tween(350))
         }
     }
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        StatusBar(state, Modifier.fillMaxWidth().padding(16.dp))
+        StatusBar(
+            state,
+            debug = if (showDebug) overlay.debug else null,
+            onClick = { showDebug = !showDebug },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        )
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             CameraPreview(controller, Modifier.fillMaxSize())
+            DocumentOverlay(overlay, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = flash.value }.background(Color.White))
         }
 
         ModeSelector(
@@ -145,11 +191,7 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit)
 
         ControlBar(
             state = state,
-            onCapture = {
-                viewModel.capture(controller) {
-                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                }
-            },
+            onCapture = viewModel::captureManually,
             onToggleAuto = viewModel::toggleAutoCapture,
             onOpenPages = onOpenPages,
             modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp, horizontal = 24.dp),
@@ -158,25 +200,35 @@ private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit)
 }
 
 @Composable
-private fun StatusBar(state: ScannerUiState, modifier: Modifier = Modifier) {
+private fun StatusBar(state: ScannerUiState, debug: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val text = when (state.status) {
         ScanStatus.SEARCHING -> R.string.status_searching
-        ScanStatus.MANUAL -> R.string.status_manual
+        ScanStatus.HOLD_STILL -> R.string.status_hold_still
+        ScanStatus.READY_MANUAL -> R.string.status_ready_manual
         ScanStatus.SAVING -> R.string.status_saving
         ScanStatus.CAPTURED -> R.string.status_captured
+        ScanStatus.SAME_SHEET -> R.string.status_same_sheet
         ScanStatus.ERROR -> R.string.status_error
     }
     val container = when (state.status) {
-        ScanStatus.CAPTURED -> MaterialTheme.colorScheme.primaryContainer
+        ScanStatus.CAPTURED, ScanStatus.HOLD_STILL, ScanStatus.READY_MANUAL -> MaterialTheme.colorScheme.primaryContainer
         ScanStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Surface(shape = CircleShape, color = container) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(shape = CircleShape, color = container, onClick = onClick) {
             Text(
                 text = stringResource(text),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
+        if (debug != null) {
+            Text(
+                debug,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }

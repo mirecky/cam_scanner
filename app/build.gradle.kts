@@ -14,6 +14,9 @@ android {
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "0.1.$versionCode"
+
+        // Aplikácia beží len na S25 Ultra (arm64); ostatné architektúry by zbytočne zväčšovali APK.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
@@ -82,6 +85,7 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
+    implementation(libs.opencv)
 
     testImplementation(libs.junit)
 }

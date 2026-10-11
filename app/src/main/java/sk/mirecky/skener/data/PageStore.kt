@@ -27,6 +27,8 @@ data class Page(val file: File) {
 class PageStore(context: Context) {
 
     private val dir = File(context.filesDir, "session").apply { mkdirs() }
+    /** Pôvodné fotografie (pred orezaním), uložené pod rovnakým názvom ako strana. */
+    private val originalsDir = File(dir, "originals").apply { mkdirs() }
     private val _pages = MutableStateFlow(scan())
     val pages: StateFlow<List<Page>> = _pages.asStateFlow()
 
@@ -36,6 +38,9 @@ class PageStore(context: Context) {
         return File(dir, "%s%04d%s".format(PREFIX, next, SUFFIX))
     }
 
+    /** Pôvodná (neorezaná) fotografia k súboru strany. */
+    fun originalFile(pageFile: File): File = File(originalsDir, pageFile.name)
+
     /** Volá sa po zapísaní novej strany (alebo inej zmene mimo tejto triedy). */
     fun refresh() {
         _pages.value = scan()
@@ -43,18 +48,27 @@ class PageStore(context: Context) {
 
     suspend fun delete(page: Page) = io {
         page.file.delete()
+        originalFile(page.file).delete()
     }
 
     suspend fun clear() = io {
         files().forEach { it.delete() }
+        originalsDir.listFiles().orEmpty().forEach { it.delete() }
     }
 
     /** Vymení poradie dvoch strán premenovaním súborov. */
     suspend fun swap(a: Page, b: Page) = io {
-        val tmp = File(dir, "swap.tmp")
-        a.file.renameTo(tmp)
-        b.file.renameTo(a.file)
-        tmp.renameTo(b.file)
+        swapFiles(a.file, b.file)
+        val oa = originalFile(a.file)
+        val ob = originalFile(b.file)
+        if (oa.exists() || ob.exists()) swapFiles(oa, ob)
+    }
+
+    private fun swapFiles(a: File, b: File) {
+        val tmp = File(a.parentFile, "swap.tmp")
+        a.renameTo(tmp)
+        b.renameTo(a)
+        tmp.renameTo(b)
     }
 
     /** Otočí stranu o [degrees] (násobok 90) a prepíše súbor otočenými pixelmi. */

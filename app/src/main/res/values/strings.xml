@@ -11,7 +11,9 @@
     <string name="mode_whiteboard">Whiteboard</string>
 
     <string name="status_searching">Looking for document</string>
-    <string name="status_manual">Manual capture</string>
+    <string name="status_hold_still">Document found – hold still</string>
+    <string name="status_ready_manual">Document found – press capture</string>
+    <string name="status_same_sheet">Captured – place next sheet</string>
     <string name="status_saving">Capturing…</string>
     <string name="status_captured">Captured – place next sheet</string>
     <string name="status_error">Capture failed</string>
