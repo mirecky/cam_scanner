@@ -223,8 +223,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     private companion object {
         const val TAG = "ScannerViewModel"
-        /** Minimálna ostrosť (rozptyl Laplaceovho operátora); predbežná hodnota, ladí sa na zariadení. */
-        const val MIN_SHARPNESS = 100.0
+        /** Minimálna ostrosť (rozptyl Laplaceovho operátora); ostré zábery na S25 Ultra majú 1500–2500. */
+        const val MIN_SHARPNESS = 400.0
         const val RECENT_MS = 500L
     }
 }

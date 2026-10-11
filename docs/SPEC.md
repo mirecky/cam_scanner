@@ -101,7 +101,7 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 
 ### F6 – Správa strán
 
-- Náhľad všetkých strán rozpracovaného dokumentu.
+- Náhľad všetkých strán rozpracovaného dokumentu; prehliadanie strany na celú obrazovku s približovaním dvoma prstami a dvojitým ťuknutím.
 - Zmena poradia ťahaním, zmazanie, opätovné nasnímanie vybranej strany.
 - Pokračovanie v skenovaní do existujúceho rozpracovaného dokumentu.
 
@@ -114,9 +114,8 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 
 ### F8 – Export a ukladanie
 
-- Pri prvom spustení si používateľ vyberie cieľový priečinok (Storage Access Framework, trvalé oprávnenie k stromu priečinkov).
-- Hotové PDF sa ukladajú výlučne do tohto priečinka; tento priečinok možno synchronizovať aplikáciou MEGA (funkcia Sync).
-- Rozpracované dokumenty a medzivýsledky sa ukladajú v internom úložisku aplikácie a do synchronizovaného priečinka sa nedostávajú.
+- Hotové PDF sa ukladajú do pevného priečinka `Dokumenty/Skener` vo verejnom úložisku telefónu (MediaStore, bez ďalších povolení).
+- Rozpracované dokumenty a medzivýsledky sa ukladajú v internom úložisku aplikácie a do priečinka `Dokumenty/Skener` sa nedostávajú.
 - Predvolený názov súboru: `Sken_RRRR-MM-DD_HH-MM.pdf`, s možnosťou premenovania pred uložením.
 - Voľby exportu: veľkosť strany (A4 / podľa predlohy), kvalita obrazu (štandardná / vysoká).
 - Zdieľanie hotového PDF systémovým dialógom.
@@ -134,7 +133,7 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 
 **Fáza 3:** režim kniha (rozdelenie dvojstrany), režim preukaz (obe strany karty na jednu stranu A4), podpis, anotácie, retuš škvŕn.
 
-**Vylúčené:** ovládanie tlačidlami hlasitosti, cloudové úložiská v aplikácii (synchronizáciu zabezpečuje externe aplikácia MEGA), reklamy, analytika.
+**Vylúčené:** ovládanie tlačidlami hlasitosti, cloudové úložiská a synchronizácia v aplikácii, reklamy, analytika.
 
 ### 4.1 AI funkcie (fáza 2)
 
@@ -196,5 +195,5 @@ Predvolený filter sa určuje podľa režimu (dokument/tabuľa) a dá sa zmeniť
 - Pri zapnutom automatickom snímaní sa sada 20 listov A4 prikladaných po jednom nasníma bez dotyku obrazovky, bez duplicít a bez vynechania listu.
 - Pri namierení na scénu bez dokumentu (podlaha, osoba, nábytok) nedôjde k automatickému nasnímaniu.
 - Vo výslednom PDF možno vyhľadať slovo so slovenskou diakritikou a skopírovať text.
-- PDF sa objaví vo zvolenom priečinku a aplikácia MEGA ho zosynchronizuje.
+- PDF sa objaví v priečinku `Dokumenty/Skener`.
 - Aplikácia funguje v režime lietadlo.

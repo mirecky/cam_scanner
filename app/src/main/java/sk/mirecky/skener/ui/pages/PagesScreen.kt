@@ -221,10 +221,10 @@ private fun PageViewer(
             key = { pages[it].cacheKey },
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) { index ->
-            PageImage(
+            ZoomablePageImage(
                 pages[index],
                 contentDescription = stringResource(R.string.page_position, index + 1, pages.size),
-                modifier = Modifier.fillMaxSize().padding(8.dp),
+                modifier = Modifier.fillMaxSize(),
             )
         }
 

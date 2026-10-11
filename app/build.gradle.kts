@@ -85,6 +85,7 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
+    implementation(libs.telephoto.coil3)
     implementation(libs.opencv)
 
     testImplementation(libs.junit)
