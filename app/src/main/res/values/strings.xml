@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Scanner</string>
+
+    <string name="permission_title">Camera access needed</string>
+    <string name="permission_text">The scanner needs the camera to capture documents. Images never leave your phone.</string>
+    <string name="permission_grant">Allow camera</string>
+    <string name="permission_settings">Open settings</string>
+
+    <string name="mode_document">Document</string>
+    <string name="mode_whiteboard">Whiteboard</string>
+
+    <string name="status_searching">Looking for document</string>
+    <string name="status_manual">Manual capture</string>
+    <string name="status_saving">Capturing…</string>
+    <string name="status_captured">Captured – place next sheet</string>
+    <string name="status_error">Capture failed</string>
+
+    <string name="action_capture">Capture</string>
+    <string name="action_auto_on">Automatic capture on</string>
+    <string name="action_auto_off">Automatic capture off</string>
+    <string name="action_pages">Pages</string>
+    <string name="label_auto">AUTO</string>
+    <string name="label_manual">MANUAL</string>
+
+    <plurals name="page_count">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+</resources>

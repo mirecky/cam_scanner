@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Skener</string>
+
+    <string name="permission_title">Potrebný prístup ku kamere</string>
+    <string name="permission_text">Skener potrebuje kameru na snímanie dokumentov. Obrázky nikdy neopustia tvoj telefón.</string>
+    <string name="permission_grant">Povoliť kameru</string>
+    <string name="permission_settings">Otvoriť nastavenia</string>
+
+    <string name="mode_document">Dokument</string>
+    <string name="mode_whiteboard">Tabuľa</string>
+
+    <string name="status_searching">Hľadám dokument</string>
+    <string name="status_manual">Ručné snímanie</string>
+    <string name="status_saving">Snímam…</string>
+    <string name="status_captured">Nasnímané – polož ďalší list</string>
+    <string name="status_error">Snímanie zlyhalo</string>
+
+    <string name="action_capture">Nasnímať</string>
+    <string name="action_auto_on">Automatické snímanie zapnuté</string>
+    <string name="action_auto_off">Automatické snímanie vypnuté</string>
+    <string name="action_pages">Strany</string>
+    <string name="label_auto">AUTO</string>
+    <string name="label_manual">RUČNE</string>
+
+    <plurals name="page_count">
+        <item quantity="one">%d strana</item>
+        <item quantity="few">%d strany</item>
+        <item quantity="many">%d strany</item>
+        <item quantity="other">%d strán</item>
+    </plurals>
+</resources>

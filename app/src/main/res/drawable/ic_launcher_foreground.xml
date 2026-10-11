@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- list papiera -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,36 L60,36 L68,44 L68,72 L42,72 Z" />
+    <path
+        android:fillColor="#BBDEFB"
+        android:pathData="M60,36 L60,44 L68,44 Z" />
+    <!-- riadky textu -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M46,50h18v2.5h-18z M46,56h18v2.5h-18z M46,62h12v2.5h-12z" />
+    <!-- rohové značky -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M30,38 L30,30 L38,30 M70,30 L78,30 L78,38 M78,70 L78,78 L70,78 M38,78 L30,78 L30,70" />
+</vector>
