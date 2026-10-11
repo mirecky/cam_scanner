@@ -53,15 +53,10 @@
     <string name="signal_vibration">Signál: vibrácia</string>
     <string name="signal_silent">Signál: vypnutý</string>
     <string name="filter_bw">Čiernobiely</string>
-    <string name="filter_bw_desc">Čistý biely papier, čierny text, bez tieňa a škvŕn</string>
     <string name="filter_gray">Odtiene šedej</string>
-    <string name="filter_gray_desc">Zachová obrázky a odtiene, bez tieňa</string>
     <string name="filter_color">Farebný</string>
-    <string name="filter_color_desc">Biely papier, prirodzené farby (tlačivá, pečiatky)</string>
     <string name="filter_whiteboard">Tabuľa</string>
-    <string name="filter_whiteboard_desc">Potlačí odlesky, sýte fixky</string>
     <string name="filter_original">Originál</string>
-    <string name="filter_original_desc">Len orezané a vyrovnané</string>
     <string name="exposure_label">Jas %s EV</string>
     <plurals name="delete_documents_title">
         <item quantity="one">Zmazať %d dokument?</item>
@@ -75,12 +70,15 @@
         <item quantity="many">Zmazať %d strany?</item>
         <item quantity="other">Zmazať %d strán?</item>
     </plurals>
-    <plurals name="filter_title">
-        <item quantity="one">Filter pre %d stranu</item>
-        <item quantity="few">Filter pre %d strany</item>
-        <item quantity="many">Filter pre %d strany</item>
-        <item quantity="other">Filter pre %d strán</item>
-    </plurals>
+
+    <string name="apply_to_all">Použiť na všetky strany</string>
+    <string name="apply_to_selected">Použiť na vybrané (%d)</string>
+    <string name="action_less">Menej</string>
+    <string name="action_more">Viac</string>
+    <string name="param_ink">Sýtosť písma</string>
+    <string name="param_contrast">Kontrast</string>
+    <string name="param_saturation">Sýtosť farieb</string>
+    <string name="param_brightness">Jas</string>
 
     <plurals name="page_count">
         <item quantity="one">%d strana</item>

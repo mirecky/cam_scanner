@@ -76,7 +76,6 @@ import sk.mirecky.skener.R
 import sk.mirecky.skener.SkenerApp
 import sk.mirecky.skener.data.DocumentItem
 import sk.mirecky.skener.data.PageItem
-import sk.mirecky.skener.scanner.PageFilter
 import sk.mirecky.skener.ui.common.PageImage
 
 /**
@@ -100,7 +99,8 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
 
     var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var viewerIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-    var filterTargets by remember { mutableStateOf<Set<String>?>(null) }
+    // Strany, na ktoré sa v prehliadači dá použiť filter naraz (vybrané; null = všetky).
+    var viewerTargets by remember { mutableStateOf<Set<String>?>(null) }
     var confirmDelete by remember { mutableStateOf<Set<String>?>(null) }
     var renaming by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
@@ -111,10 +111,11 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
         PageViewer(
             pages = doc.pages,
             initialIndex = index.coerceIn(doc.pages.indices),
-            onClose = { viewerIndex = null },
+            applyTargets = viewerTargets,
+            onClose = { viewerIndex = null; viewerTargets = null },
             onRotate = { page -> app.scope.launch { repository.rotate(docId, setOf(page.id)) } },
-            onFilter = { page -> filterTargets = setOf(page.id) },
             onDelete = { page -> confirmDelete = setOf(page.id) },
+            onApplyFilter = { ids, filter, level -> app.scope.launch { repository.setFilter(docId, ids, filter, level) } },
         )
     } else {
         BackHandler { if (selecting) selected = emptySet() else onBack() }
@@ -133,7 +134,12 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                             IconButton(onClick = { app.scope.launch { repository.rotate(docId, selected) } }) {
                                 Icon(Icons.Outlined.RotateRight, stringResource(R.string.action_rotate))
                             }
-                            IconButton(onClick = { filterTargets = selected }) {
+                            IconButton(onClick = {
+                                // Úprava filtra pre vybrané strany: prehliadač na prvej vybranej strane.
+                                viewerTargets = selected
+                                viewerIndex = doc.pages.indexOfFirst { it.id in selected }.coerceAtLeast(0)
+                                selected = emptySet()
+                            }) {
                                 Icon(Icons.Outlined.AutoFixHigh, stringResource(R.string.action_filter))
                             }
                             IconButton(onClick = { confirmDelete = selected }) {
@@ -167,7 +173,7 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                 if (!selecting) {
                     BottomAppBar {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { filterTargets = doc.pages.map { it.id }.toSet() }, modifier = Modifier.weight(1f)) {
+                            OutlinedButton(onClick = { viewerTargets = null; viewerIndex = 0 }, modifier = Modifier.weight(1f)) {
                                 Icon(Icons.Outlined.AutoFixHigh, null)
                                 Text("  " + stringResource(R.string.action_filter_all))
                             }
@@ -189,19 +195,6 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
         }
-    }
-
-    filterTargets?.let { targets ->
-        FilterSheet(
-            current = doc.pages.filter { it.id in targets }.map { it.filter }.distinct().singleOrNull(),
-            count = targets.size,
-            onDismiss = { filterTargets = null },
-            onSelect = { filter ->
-                filterTargets = null
-                selected = emptySet()
-                app.scope.launch { repository.setFilter(docId, targets, filter) }
-            },
-        )
     }
 
     confirmDelete?.let { ids ->

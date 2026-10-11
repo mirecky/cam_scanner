@@ -64,7 +64,7 @@ class DocumentRepository(private val context: Context) {
     /** Spracuje nasnímanú fotografiu a pridá stranu na koniec dokumentu. */
     suspend fun addPage(slot: PageSlot, quad: Quad?, mode: ScanMode) {
         val filter = PageFilter.defaultFor(mode)
-        val page = PageItem(slot.pageId, slot.dir, filter, mode, rotation = 0, quad = quad, version = System.currentTimeMillis())
+        val page = PageItem(slot.pageId, slot.dir, filter, level = 0, mode = mode, rotation = 0, quad = quad, version = System.currentTimeMillis())
         withContext(Dispatchers.Default) {
             try {
                 PageRenderer.renderNew(slot.originalFile, page.cropFile, page.displayFile, quad, mode, filter)
@@ -117,15 +117,15 @@ class DocumentRepository(private val context: Context) {
         }
     }
 
-    suspend fun setFilter(docId: String, pageIds: Set<String>, filter: PageFilter) {
+    suspend fun setFilter(docId: String, pageIds: Set<String>, filter: PageFilter, level: Int) {
         val doc = document(docId) ?: return
-        val targets = doc.pages.filter { it.id in pageIds && it.filter != filter }
+        val targets = doc.pages.filter { it.id in pageIds && (it.filter != filter || it.level != level) }
         if (targets.isEmpty()) return
-        withContext(Dispatchers.Default) { targets.forEach { PageRenderer.applyFilter(it.cropFile, it.displayFile, filter) } }
+        withContext(Dispatchers.Default) { targets.forEach { PageRenderer.applyFilter(it.cropFile, it.displayFile, filter, level) } }
         val now = System.currentTimeMillis()
         val changed = targets.map { it.id }.toSet()
         modify(docId) { d ->
-            d.copy(pages = d.pages.map { p -> if (p.id in changed) p.copy(filter = filter, version = now) else p })
+            d.copy(pages = d.pages.map { p -> if (p.id in changed) p.copy(filter = filter, level = level, version = now) else p })
         }
     }
 
@@ -225,7 +225,7 @@ class DocumentRepository(private val context: Context) {
                 val dir = File(File(docDir, "pages"), id).apply { mkdirs() }
                 f.copyTo(File(dir, "crop.jpg"), overwrite = true)
                 f.copyTo(File(dir, "display.jpg"), overwrite = true)
-                PageItem(id, dir, PageFilter.ORIGINAL, ScanMode.DOCUMENT, 0, null, now)
+                PageItem(id, dir, PageFilter.ORIGINAL, 0, ScanMode.DOCUMENT, 0, null, now)
             }
             DocumentJson.write(DocumentItem(docId, docDir, defaultName(now), now, now, pages, null))
         }

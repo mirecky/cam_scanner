@@ -23,6 +23,7 @@ internal object DocumentJson {
                 JSONObject()
                     .put("id", page.id)
                     .put("filter", page.filter.name)
+                    .put("level", page.level)
                     .put("mode", page.mode.name)
                     .put("rotation", page.rotation)
                     .put("version", page.version)
@@ -44,6 +45,7 @@ internal object DocumentJson {
                     id = id,
                     dir = File(pagesDir, id),
                     filter = enumValueOrNull<PageFilter>(p.optString("filter")) ?: PageFilter.ORIGINAL,
+                    level = p.optInt("level", 0),
                     mode = enumValueOrNull<ScanMode>(p.optString("mode")) ?: ScanMode.DOCUMENT,
                     rotation = p.optInt("rotation", 0),
                     quad = p.optJSONArray("quad")?.let { a ->

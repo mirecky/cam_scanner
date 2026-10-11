@@ -10,6 +10,8 @@ data class PageItem(
     val id: String,
     val dir: File,
     val filter: PageFilter,
+    /** Parameter filtra (−5…+5, 0 = predvolené). */
+    val level: Int,
     val mode: ScanMode,
     /** Otočenie oproti pôvodnému orezu v stupňoch (0, 90, 180, 270). */
     val rotation: Int,

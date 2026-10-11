@@ -44,9 +44,9 @@ internal object PageRenderer {
     }
 
     /** Znovu vytvorí výslednú stranu z farebného orezu s iným filtrom. */
-    fun applyFilter(crop: File, display: File, filter: PageFilter) {
+    fun applyFilter(crop: File, display: File, filter: PageFilter, level: Int) {
         val src = Imgcodecs.imread(crop.path, Imgcodecs.IMREAD_COLOR)
-        renderFilter(src, filter, display)
+        renderFilter(src, filter, display, level)
         src.release()
     }
 
@@ -62,8 +62,8 @@ internal object PageRenderer {
         }
     }
 
-    private fun renderFilter(crop: Mat, filter: PageFilter, display: File) {
-        val out = Filters.apply(crop, filter)
+    private fun renderFilter(crop: Mat, filter: PageFilter, display: File, level: Int = 0) {
+        val out = Filters.apply(crop, filter, level)
         write(out, display)
         out.release()
     }

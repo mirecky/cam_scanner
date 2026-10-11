@@ -53,15 +53,10 @@
     <string name="signal_vibration">Signal: vibration</string>
     <string name="signal_silent">Signal: off</string>
     <string name="filter_bw">Black &amp; white</string>
-    <string name="filter_bw_desc">Clean white paper, black text, shadows and specks removed</string>
     <string name="filter_gray">Grayscale</string>
-    <string name="filter_gray_desc">Keeps images and shades, shadows removed</string>
     <string name="filter_color">Color</string>
-    <string name="filter_color_desc">White paper, natural colors (forms, stamps)</string>
     <string name="filter_whiteboard">Whiteboard</string>
-    <string name="filter_whiteboard_desc">Suppresses glare, vivid markers</string>
     <string name="filter_original">Original</string>
-    <string name="filter_original_desc">Only cropped and straightened</string>
     <string name="exposure_label">Brightness %s EV</string>
     <plurals name="delete_documents_title">
         <item quantity="one">Delete %d document?</item>
@@ -71,10 +66,15 @@
         <item quantity="one">Delete %d page?</item>
         <item quantity="other">Delete %d pages?</item>
     </plurals>
-    <plurals name="filter_title">
-        <item quantity="one">Filter for %d page</item>
-        <item quantity="other">Filter for %d pages</item>
-    </plurals>
+
+    <string name="apply_to_all">Apply to all pages</string>
+    <string name="apply_to_selected">Apply to selected (%d)</string>
+    <string name="action_less">Less</string>
+    <string name="action_more">More</string>
+    <string name="param_ink">Text darkness</string>
+    <string name="param_contrast">Contrast</string>
+    <string name="param_saturation">Color saturation</string>
+    <string name="param_brightness">Brightness</string>
 
     <plurals name="page_count">
         <item quantity="one">%d page</item>

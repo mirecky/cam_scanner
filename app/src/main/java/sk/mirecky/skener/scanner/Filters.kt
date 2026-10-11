@@ -37,12 +37,22 @@ enum class PageFilter {
  */
 object Filters {
 
-    fun apply(bgr: Mat, filter: PageFilter): Mat = when (filter) {
-        PageFilter.ORIGINAL -> bgr.clone()
-        PageFilter.GRAYSCALE -> grayscale(bgr)
-        PageFilter.BLACK_WHITE -> blackWhite(bgr)
-        PageFilter.COLOR -> color(bgr, strength = 1.0, saturation = 1.15)
-        PageFilter.WHITEBOARD -> color(bgr, strength = 1.0, saturation = 1.6)
+    /** Rozsah parametra filtra (−/+) nastaviteľného používateľom. */
+    val LEVELS = -5..5
+
+    /**
+     * Použije [filter] s parametrom [level] (−5…+5, 0 = predvolené):
+     * čiernobiely – sýtosť písma, šedý – kontrast, farebný a tabuľa – sýtosť farieb, originál – jas.
+     */
+    fun apply(bgr: Mat, filter: PageFilter, level: Int = 0): Mat {
+        val l = level.coerceIn(LEVELS)
+        return when (filter) {
+            PageFilter.ORIGINAL -> Mat().also { bgr.convertTo(it, -1, 1.0, l * 8.0) }
+            PageFilter.GRAYSCALE -> grayscale(bgr, l)
+            PageFilter.BLACK_WHITE -> blackWhite(bgr, l)
+            PageFilter.COLOR -> color(bgr, strength = 1.0, saturation = (1.15 + 0.1 * l).coerceAtLeast(0.4))
+            PageFilter.WHITEBOARD -> color(bgr, strength = 1.0, saturation = (1.6 + 0.15 * l).coerceAtLeast(0.6))
+        }
     }
 
     /** Šedý obraz s odstráneným tieňom (pozadie ≈ 255). */
@@ -78,25 +88,28 @@ object Filters {
         return background
     }
 
-    private fun grayscale(bgr: Mat): Mat {
+    private fun grayscale(bgr: Mat, level: Int): Mat {
         val norm = normalizedGray(bgr)
-        stretch(norm, lowPercent = 1.0, highValue = 245.0)
+        // Vyšší kontrast: viac tmavých pixelov do čiernej, svetlé tóny skôr do bielej.
+        stretch(norm, lowPercent = (1.0 + 0.6 * level).coerceIn(0.0, 6.0), highValue = 245.0 - 5.0 * level)
         val out = Mat()
         Imgproc.cvtColor(norm, out, Imgproc.COLOR_GRAY2BGR)
         norm.release()
         return out
     }
 
-    private fun blackWhite(bgr: Mat): Mat {
+    private fun blackWhite(bgr: Mat, level: Int): Mat {
         val norm = normalizedGray(bgr)
         // Po odstránení tieňa je papier ≈ 255; text je výrazne tmavší. Adaptívny prah
         // si poradí aj so zvyškovými prechodmi, pevná časť (C) potláča šum papiera.
         val block = (max(norm.cols(), norm.rows()) / 40).let { if (it % 2 == 0) it + 1 else it }.coerceAtLeast(15)
         val bw = Mat()
-        Imgproc.adaptiveThreshold(norm, bw, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, block, 18.0)
+        // Vyššia úroveň = menšia odchýlka od okolia stačí na čiernu (sýtejšie, hrubšie písmo).
+        val offset = (18.0 - 3.0 * level).coerceAtLeast(2.0)
+        Imgproc.adaptiveThreshold(norm, bw, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, block, offset)
         // Veľmi svetlé miesta sú vždy papier (zabraňuje zrnitosti v prázdnych plochách).
         val paper = Mat()
-        Imgproc.threshold(norm, paper, 225.0, 255.0, Imgproc.THRESH_BINARY)
+        Imgproc.threshold(norm, paper, (225.0 + 3.0 * level).coerceIn(200.0, 250.0), 255.0, Imgproc.THRESH_BINARY)
         Core.bitwise_or(bw, paper, bw)
         removeSpecks(bw, maxArea = (norm.cols() * norm.rows() * 1e-5).roundToInt().coerceAtLeast(6))
         norm.release()
