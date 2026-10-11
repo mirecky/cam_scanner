@@ -52,7 +52,7 @@
     <string name="signal_sound">Signal: sound</string>
     <string name="signal_vibration">Signal: vibration</string>
     <string name="signal_silent">Signal: off</string>
-    <string name="filter_bw">Black & white</string>
+    <string name="filter_bw">Black &amp; white</string>
     <string name="filter_bw_desc">Clean white paper, black text, shadows and specks removed</string>
     <string name="filter_gray">Grayscale</string>
     <string name="filter_gray_desc">Keeps images and shades, shadows removed</string>
