@@ -23,6 +23,20 @@
     <string name="label_auto">AUTO</string>
     <string name="label_manual">RUČNE</string>
 
+    <string name="action_back">Späť</string>
+    <string name="action_back_to_camera">Späť ku kamere</string>
+    <string name="action_close">Zavrieť</string>
+    <string name="action_delete">Zmazať</string>
+    <string name="action_cancel">Zrušiť</string>
+    <string name="action_rotate">Otočiť</string>
+    <string name="action_move_left">Posunúť doľava</string>
+    <string name="action_move_right">Posunúť doprava</string>
+    <string name="action_clear_all">Zmazať všetky strany</string>
+    <string name="pages_empty">Zatiaľ nie sú nasnímané žiadne strany.</string>
+    <string name="page_position">%1$d / %2$d</string>
+    <string name="clear_title">Zmazať všetky strany?</string>
+    <string name="clear_text">Všetky nasnímané strany tohto dokumentu sa zmažú. Túto akciu nemožno vrátiť.</string>
+
     <plurals name="page_count">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>

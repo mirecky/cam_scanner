@@ -15,6 +15,11 @@ import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import sk.mirecky.skener.ui.pages.PageImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,7 +75,7 @@ import sk.mirecky.skener.R
 import sk.mirecky.skener.scanner.ScanMode
 
 @Composable
-fun ScannerScreen(viewModel: ScannerViewModel = viewModel()) {
+fun ScannerScreen(onOpenPages: () -> Unit, viewModel: ScannerViewModel = viewModel()) {
     val context = LocalContext.current
     var hasPermission by remember {
         mutableStateOf(
@@ -89,7 +94,7 @@ fun ScannerScreen(viewModel: ScannerViewModel = viewModel()) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (hasPermission) {
-            ScannerContent(viewModel)
+            ScannerContent(viewModel, onOpenPages)
         } else {
             PermissionRationale(
                 showSettings = askedOnce,
@@ -106,7 +111,7 @@ fun ScannerScreen(viewModel: ScannerViewModel = viewModel()) {
 }
 
 @Composable
-private fun ScannerContent(viewModel: ScannerViewModel) {
+private fun ScannerContent(viewModel: ScannerViewModel, onOpenPages: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = LocalView.current
@@ -146,6 +151,7 @@ private fun ScannerContent(viewModel: ScannerViewModel) {
                 }
             },
             onToggleAuto = viewModel::toggleAutoCapture,
+            onOpenPages = onOpenPages,
             modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp, horizontal = 24.dp),
         )
     }
@@ -198,6 +204,7 @@ private fun ControlBar(
     state: ScannerUiState,
     onCapture: () -> Unit,
     onToggleAuto: () -> Unit,
+    onOpenPages: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
@@ -205,11 +212,21 @@ private fun ControlBar(
         BadgedBox(
             badge = { if (state.pageCount > 0) Badge { Text(state.pageCount.toString()) } },
         ) {
-            IconButton(
-                onClick = { /* Správa strán – ďalší krok (F6). */ },
-                modifier = Modifier.size(56.dp).semantics { contentDescription = pagesLabel },
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(2.dp, Color.White, RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenPages)
+                    .semantics { contentDescription = pagesLabel },
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(32.dp))
+                val last = state.lastPage
+                if (last != null) {
+                    PageImage(last, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else {
+                    Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                }
             }
         }
 

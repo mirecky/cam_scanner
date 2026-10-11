@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import sk.mirecky.skener.data.PageStore
+import sk.mirecky.skener.SkenerApp
+import sk.mirecky.skener.data.Page
 import sk.mirecky.skener.data.SettingsRepository
 import sk.mirecky.skener.scanner.ScanMode
 
@@ -26,24 +27,25 @@ data class ScannerUiState(
     val mode: ScanMode = ScanMode.DOCUMENT,
     val autoCapture: Boolean = true,
     val pageCount: Int = 0,
+    val lastPage: Page? = null,
     val status: ScanStatus = ScanStatus.SEARCHING,
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settings = SettingsRepository(application)
-    private val pageStore = PageStore(application)
+    private val pageStore = (application as SkenerApp).pageStore
 
-    private val pageCount = MutableStateFlow(pageStore.pages().size)
     private val transientStatus = MutableStateFlow<ScanStatus?>(null)
     private var statusResetJob: Job? = null
 
     val uiState: StateFlow<ScannerUiState> =
-        combine(settings.scanMode, settings.autoCapture, pageCount, transientStatus) { mode, auto, count, transient ->
+        combine(settings.scanMode, settings.autoCapture, pageStore.pages, transientStatus) { mode, auto, pages, transient ->
             ScannerUiState(
                 mode = mode,
                 autoCapture = auto,
-                pageCount = count,
+                pageCount = pages.size,
+                lastPage = pages.lastOrNull(),
                 status = transient ?: if (auto) ScanStatus.SEARCHING else ScanStatus.MANUAL,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScannerUiState())
@@ -68,7 +70,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             ContextCompat.getMainExecutor(getApplication()),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    pageCount.value = pageStore.pages().size
+                    pageStore.refresh()
                     setTransientStatus(ScanStatus.CAPTURED, resetAfterMs = 1_500)
                     onCaptured()
                 }

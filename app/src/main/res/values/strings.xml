@@ -23,6 +23,20 @@
     <string name="label_auto">AUTO</string>
     <string name="label_manual">MANUAL</string>
 
+    <string name="action_back">Back</string>
+    <string name="action_back_to_camera">Back to camera</string>
+    <string name="action_close">Close</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_rotate">Rotate</string>
+    <string name="action_move_left">Move left</string>
+    <string name="action_move_right">Move right</string>
+    <string name="action_clear_all">Delete all pages</string>
+    <string name="pages_empty">No pages scanned yet.</string>
+    <string name="page_position">%1$d / %2$d</string>
+    <string name="clear_title">Delete all pages?</string>
+    <string name="clear_text">All scanned pages of this document will be deleted. This cannot be undone.</string>
+
     <plurals name="page_count">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>

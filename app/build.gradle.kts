@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
 }
