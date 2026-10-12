@@ -46,4 +46,6 @@ data class DocumentItem(
     val pages: List<PageItem>,
     /** URI výsledného PDF v MediaStore (Dokumenty/Skener), ak už bolo vytvorené. */
     val pdfUri: String?,
+    /** Zmenšené PDF (nižšie rozlíšenie a vyššia kompresia obrázkov). */
+    val compact: Boolean = false,
 )

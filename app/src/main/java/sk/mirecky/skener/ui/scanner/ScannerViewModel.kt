@@ -260,6 +260,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Pridá fotografie z galérie ako strany práve skenovaného dokumentu (alebo nového). */
+    fun importImages(uris: List<android.net.Uri>) {
+        processing.value += uris.size
+        viewModelScope.launch {
+            var remaining = uris.size
+            try {
+                val docId = repository.importImages(uris, documentId.value) {
+                    remaining--
+                    processing.value -= 1
+                }
+                if (docId != null) documentId.value = docId
+            } finally {
+                processing.value -= remaining
+            }
+        }
+    }
+
     /** Ručné snímanie spúšťou; ak je v zábere nájdený dokument, oreže sa podľa neho. */
     fun captureManually() {
         val recent = latest?.takeIf { System.currentTimeMillis() - it.timeMs < RECENT_MS }

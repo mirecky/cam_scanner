@@ -50,6 +50,32 @@ internal class PdfStore(private val context: Context) {
         resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.pdf") }, null, null)
     }
 
+    /** Veľkosť súboru v bajtoch, alebo null, ak súbor neexistuje. */
+    fun size(uri: Uri): Long? = runCatching {
+        resolver.query(uri, arrayOf(MediaStore.MediaColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getLong(0) else null
+        }
+    }.getOrNull()
+
+    /** Uloží obrázok strany ako JPEG do `Obrázky/Skener` (zobrazí sa v galérii). */
+    fun saveImage(name: String, source: File): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.jpg")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Skener/")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = runCatching { resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values) }.getOrNull()
+            ?: return false
+        return runCatching {
+            resolver.openOutputStream(uri, "w")!!.use { out -> source.inputStream().use { it.copyTo(out) } }
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        }.onFailure {
+            Log.w(TAG, "Uloženie obrázka zlyhalo", it)
+            resolver.delete(uri, null, null)
+        }.isSuccess
+    }
+
     fun delete(uri: Uri) {
         runCatching { resolver.delete(uri, null, null) }
             .onFailure { Log.w(TAG, "Zmazanie PDF zlyhalo", it) }

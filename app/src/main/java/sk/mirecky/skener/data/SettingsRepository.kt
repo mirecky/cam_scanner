@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import sk.mirecky.skener.scanner.ScanMode
 
+/** Triedenie knižnice dokumentov. */
+enum class LibrarySort { NEWEST, NAME, SIZE }
+
 /** Signál po nasnímaní strany. */
 enum class CaptureSignal { SOUND, VIBRATION, SILENT }
 
@@ -33,6 +36,15 @@ class SettingsRepository(private val context: Context) {
             prefs[KEY_SIGNAL]?.let { name -> CaptureSignal.entries.firstOrNull { it.name == name } } ?: CaptureSignal.SOUND
         }
 
+    val librarySort: Flow<LibrarySort> =
+        context.dataStore.data.map { prefs ->
+            prefs[KEY_SORT]?.let { name -> LibrarySort.entries.firstOrNull { it.name == name } } ?: LibrarySort.NEWEST
+        }
+
+    suspend fun setLibrarySort(sort: LibrarySort) {
+        context.dataStore.edit { it[KEY_SORT] = sort.name }
+    }
+
     suspend fun setCaptureSignal(signal: CaptureSignal) {
         context.dataStore.edit { it[KEY_SIGNAL] = signal.name }
     }
@@ -49,5 +61,6 @@ class SettingsRepository(private val context: Context) {
         val KEY_AUTO_CAPTURE = booleanPreferencesKey("auto_capture")
         val KEY_SCAN_MODE = stringPreferencesKey("scan_mode")
         val KEY_SIGNAL = stringPreferencesKey("capture_signal")
+        val KEY_SORT = stringPreferencesKey("library_sort")
     }
 }

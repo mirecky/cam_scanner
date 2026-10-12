@@ -8,6 +8,7 @@ import org.opencv.core.MatOfInt
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import sk.mirecky.skener.scanner.Adjust
+import sk.mirecky.skener.scanner.DocumentDetector
 import sk.mirecky.skener.scanner.Filters
 import sk.mirecky.skener.scanner.ImageOps
 import sk.mirecky.skener.scanner.PageFilter
@@ -19,6 +20,8 @@ import java.io.File
 internal object PageRenderer {
 
     private const val JPEG_QUALITY = 92
+    /** Kratšia strana obrazu pri hľadaní dokumentu (zodpovedá analýze z kamery). */
+    private const val ANALYSIS_WIDTH = 480
 
     /**
      * Z pôvodnej fotografie vytvorí farebný orez a výslednú stranu s filtrom a úpravami.
@@ -58,6 +61,33 @@ internal object PageRenderer {
         renderFilter(rotated, filter, display, level, adjust)
         rotated.release()
         if (rotated !== cropped) cropped.release()
+    }
+
+    /**
+     * Nájde dokument na fotografii (import z galérie). Fotografia sa zmenší na rozlíšenie
+     * analýzy z kamery, na ktoré je detektor nastavený. Vráti null, ak sa dokument nenašiel.
+     */
+    fun detect(original: File): Quad? {
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(original)) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            val w = info.size.width
+            val h = info.size.height
+            val scale = ANALYSIS_WIDTH.toDouble() / minOf(w, h)
+            if (scale < 1) decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
+        }
+        val rgba = Mat()
+        Utils.bitmapToMat(bitmap, rgba)
+        bitmap.recycle()
+        val gray = Mat()
+        Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+        rgba.release()
+        val detector = DocumentDetector()
+        return try {
+            detector.detect(gray, ScanMode.DOCUMENT)?.quad
+        } finally {
+            detector.release()
+            gray.release()
+        }
     }
 
     private fun rotate(src: Mat, rotation: Int): Mat {

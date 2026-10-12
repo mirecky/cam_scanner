@@ -49,6 +49,13 @@ class DocumentRepository(private val context: Context) {
     /** Dokumenty od najnovšie upraveného. */
     val documents: StateFlow<List<DocumentItem>> = _documents.asStateFlow()
 
+    private val _pdfSizes = MutableStateFlow<Map<String, Long>>(emptyMap())
+    /** Veľkosť PDF dokumentov v bajtoch (podľa ID dokumentu). */
+    val pdfSizes: StateFlow<Map<String, Long>> = _pdfSizes.asStateFlow()
+
+    /** Text dokumentov pre vyhľadávanie: ID → (verzia, text bez diakritiky malými písmenami). */
+    private val textIndex = HashMap<String, Pair<Long, String>>()
+
     private val _exporting = MutableStateFlow<Set<String>>(emptySet())
     /** Dokumenty, ktorých PDF sa práve aktualizuje. */
     val exporting: StateFlow<Set<String>> = _exporting.asStateFlow()
@@ -94,8 +101,9 @@ class DocumentRepository(private val context: Context) {
                     page.ocrFile.writeText(result.toJson())
                 } catch (e: Throwable) {
                     Log.e(TAG, "OCR strany zlyhalo", e)
-                    // Prázdny výsledok, aby sa chybná strana neopakovala donekonečna.
-                    page.ocrFile.writeText(OcrResult(page.cropVersion, 1, 1, "", emptyList()).toJson())
+                    // Prázdny výsledok, aby sa chybná strana neopakovala donekonečna. Strana mohla
+                    // medzitým zmiznúť (zmazanie, zlúčenie dokumentov), preto zápis nesmie zlyhať.
+                    runCatching { page.ocrFile.writeText(OcrResult(page.cropVersion, 1, 1, "", emptyList()).toJson()) }
                 }
                 _ocrRevision.value += 1
                 val docDone = document(docId)?.pages.orEmpty().none { ocr(it) == null }
@@ -107,6 +115,101 @@ class DocumentRepository(private val context: Context) {
 
     init {
         scheduleOcr()
+        scope.launch { _pdfSizes.value = _documents.value.mapNotNull { d -> d.pdfUri?.let { u -> pdfStore.size(Uri.parse(u))?.let { d.id to it } } }.toMap() }
+    }
+
+    /**
+     * Celý rozpoznaný text dokumentu, pripravený na vyhľadávanie (malé písmená, bez diakritiky).
+     * Výsledok sa ukladá do pamäte, kým sa dokument alebo OCR nezmení.
+     */
+    fun searchableText(doc: DocumentItem): String {
+        val version = doc.updatedAt * 31 + _ocrRevision.value
+        synchronized(textIndex) { textIndex[doc.id]?.takeIf { it.first == version }?.let { return it.second } }
+        val text = TextSearch.normalize(documentText(doc.id))
+        synchronized(textIndex) { textIndex[doc.id] = version to text }
+        return text
+    }
+
+    /** Pôvodný (nenormalizovaný) text dokumentu na zobrazenie úryvku. */
+    fun displayText(doc: DocumentItem): String = documentText(doc.id)
+
+    /** Zapne alebo vypne zmenšené PDF (PDF sa hneď prepočíta). */
+    suspend fun setCompact(docId: String, compact: Boolean) {
+        if (document(docId)?.compact == compact) return
+        modify(docId) { it.copy(compact = compact) }
+    }
+
+    /**
+     * Pripojí strany dokumentov [sourceIds] (v danom poradí) na koniec dokumentu [targetId]
+     * a zdrojové dokumenty vrátane ich PDF zmaže. Vráti počet pripojených strán.
+     */
+    suspend fun merge(targetId: String, sourceIds: List<String>): Int {
+        val target = document(targetId) ?: return 0
+        val sources = sourceIds.distinct().filter { it != targetId }.mapNotNull(::document)
+        if (sources.isEmpty()) return 0
+        val moved = withContext(Dispatchers.IO) {
+            val pagesDir = File(target.dir, "pages").apply { mkdirs() }
+            sources.flatMap { src ->
+                src.pages.map { p ->
+                    val dest = File(pagesDir, p.id)
+                    if (!p.dir.renameTo(dest)) {
+                        p.dir.copyRecursively(dest, overwrite = true)
+                    }
+                    p.copy(dir = dest)
+                }
+            }
+        }
+        modify(targetId) { it.copy(pages = it.pages + moved) }
+        deleteDocuments(sources.map { it.id }.toSet())
+        return moved.size
+    }
+
+    /**
+     * Uloží výsledné strany dokumentu ako JPEG do `Obrázky/Skener` (galéria).
+     * Vráti počet uložených strán.
+     */
+    suspend fun exportJpeg(docId: String): Int = withContext(Dispatchers.IO) {
+        val doc = document(docId) ?: return@withContext 0
+        var count = 0
+        doc.pages.forEachIndexed { i, page ->
+            val name = if (doc.pages.size == 1) doc.name else "%s_%02d".format(doc.name, i + 1)
+            if (pdfStore.saveImage(name, page.displayFile)) count++
+        }
+        count
+    }
+
+    /**
+     * Pridá fotografie z galérie ako strany dokumentu [docId] (null = nový dokument).
+     * Na každej fotografii sa hľadá dokument; ak sa nájde, oreže sa a vyrovná ako pri snímaní.
+     * [onPage] sa volá po každej spracovanej fotografii. Vráti ID dokumentu, alebo null, ak sa nič nepodarilo.
+     */
+    suspend fun importImages(uris: List<Uri>, docId: String?, onPage: () -> Unit = {}): String? {
+        var target = docId
+        for (uri in uris) {
+            val slot = reservePage(target)
+            try {
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)!!.use { input ->
+                            slot.originalFile.outputStream().use { input.copyTo(it) }
+                        }
+                    }.isSuccess
+                }
+                if (!ok) {
+                    discard(slot)
+                    continue
+                }
+                val quad = withContext(Dispatchers.Default) { runCatching { PageRenderer.detect(slot.originalFile) }.getOrNull() }
+                addPage(slot, quad, ScanMode.DOCUMENT, filter = if (quad != null) null else PageFilter.NATURAL)
+                target = slot.docId
+            } catch (e: Exception) {
+                Log.e(TAG, "Import fotografie zlyhal", e)
+                discard(slot)
+            } finally {
+                onPage()
+            }
+        }
+        return target
     }
 
     /** Vyhradí miesto pre novú stranu; ak [docId] je null, nová strana založí nový dokument. */
@@ -118,8 +221,8 @@ class DocumentRepository(private val context: Context) {
     }
 
     /** Spracuje nasnímanú fotografiu a pridá stranu na koniec dokumentu. */
-    suspend fun addPage(slot: PageSlot, quad: Quad?, mode: ScanMode) {
-        val filter = PageFilter.defaultFor(mode)
+    suspend fun addPage(slot: PageSlot, quad: Quad?, mode: ScanMode, filter: PageFilter? = null) {
+        val filter = filter ?: PageFilter.defaultFor(mode)
         val page = PageItem(slot.pageId, slot.dir, filter, level = 0, mode = mode, rotation = 0, quad = quad, version = System.currentTimeMillis())
         withContext(Dispatchers.Default) {
             try {
@@ -271,6 +374,7 @@ class DocumentRepository(private val context: Context) {
         val removed = mutex.withLock {
             val (gone, kept) = _documents.value.partition { it.id in ids }
             _documents.value = kept
+            _pdfSizes.update { it - ids }
             ids.forEach { pdfJobs.remove(it)?.cancel() }
             gone
         }
@@ -319,8 +423,10 @@ class DocumentRepository(private val context: Context) {
         _exporting.update { it + docId }
         try {
             val tmp = File(context.cacheDir, "$docId.pdf")
-            PdfExporter.export(doc.pages, tmp, ocr = ::ocr, font = { context.resources.openRawResource(R.font.onest_regular) })
+            PdfExporter.export(doc.pages, tmp, ocr = ::ocr, font = { context.resources.openRawResource(R.font.onest_regular) }, compact = doc.compact)
             val uri = pdfStore.write(doc.name, doc.pdfUri?.let(Uri::parse), tmp)
+            val size = tmp.length()
+            _pdfSizes.update { it + (docId to size) }
             tmp.delete()
             if (uri.toString() != doc.pdfUri) {
                 mutex.withLock {

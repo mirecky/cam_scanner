@@ -38,23 +38,28 @@ import java.util.zip.DeflaterOutputStream
 internal object PdfExporter {
 
     private const val PAGE_WIDTH_PT = 595.28f
-    private const val BW_MAX_WIDTH = 2480 // 300 dpi na šírku A4
-    private const val JPEG_MAX_WIDTH = 1654 // 200 dpi na šírku A4
-    private const val JPEG_QUALITY = 76
-    private const val GRAY_JPEG_QUALITY = 80
+
+    /** Rozlíšenie a kompresia obrázkov v PDF. */
+    private class Quality(val bwMaxWidth: Int, val jpegMaxWidth: Int, val jpegQuality: Int, val grayQuality: Int)
+
+    /** 300 dpi pre čiernobiele strany, 200 dpi pre ostatné (šírka A4). */
+    private val NORMAL = Quality(bwMaxWidth = 2480, jpegMaxWidth = 1654, jpegQuality = 76, grayQuality = 80)
+    /** Zmenšené PDF: 200 dpi čiernobiele, 150 dpi ostatné, silnejšia kompresia. */
+    private val COMPACT = Quality(bwMaxWidth = 1654, jpegMaxWidth = 1240, jpegQuality = 58, grayQuality = 62)
     /** Strana s takou nízkou sýtosťou (99. percentil, 0–255) sa uloží v odtieňoch šedej. */
     private const val GRAY_SATURATION = 28
 
-    fun export(pages: List<PageItem>, target: File, ocr: (PageItem) -> OcrResult?, font: () -> InputStream) {
+    fun export(pages: List<PageItem>, target: File, ocr: (PageItem) -> OcrResult?, font: () -> InputStream, compact: Boolean = false) {
+        val q = if (compact) COMPACT else NORMAL
         PDDocument().use { doc ->
             // Písmo na textovú vrstvu sa načíta len raz a vloží sa len podmnožina použitých znakov.
             val textFont: PDFont? by lazy { runCatching { font().use { PDType0Font.load(doc, it, true) } }.getOrNull() }
             for (page in pages) {
                 val image = when (page.filter) {
-                    PageFilter.BLACK_WHITE -> bilevel(doc, page.displayFile)
-                    PageFilter.GRAYSCALE -> jpeg(doc, page.displayFile, gray = true)
-                    PageFilter.ORIGINAL -> jpeg(doc, page.displayFile, gray = false)
-                    else -> jpeg(doc, page.displayFile, gray = null)
+                    PageFilter.BLACK_WHITE -> bilevel(doc, page.displayFile, q)
+                    PageFilter.GRAYSCALE -> jpeg(doc, page.displayFile, gray = true, q)
+                    PageFilter.ORIGINAL -> jpeg(doc, page.displayFile, gray = false, q)
+                    else -> jpeg(doc, page.displayFile, gray = null, q)
                 }
                 val height = PAGE_WIDTH_PT * image.height / image.width
                 val pdfPage = PDPage(PDRectangle(PAGE_WIDTH_PT, height))
@@ -119,13 +124,13 @@ internal object PdfExporter {
      * Strana ako JPEG. [gray] = true vždy jednokanálový, false vždy farebný,
      * null podľa obsahu (strana bez farieb sa uloží v odtieňoch šedej).
      */
-    private fun jpeg(doc: PDDocument, file: File, gray: Boolean?): PDImageXObject {
+    private fun jpeg(doc: PDDocument, file: File, gray: Boolean?, q: Quality): PDImageXObject {
         val src = Imgcodecs.imread(file.path, Imgcodecs.IMREAD_COLOR)
-        val scaled = downscale(src, JPEG_MAX_WIDTH)
+        val scaled = downscale(src, q.jpegMaxWidth)
         val asGray = gray ?: isColorless(scaled)
         val image = if (asGray) Mat().also { Imgproc.cvtColor(scaled, it, Imgproc.COLOR_BGR2GRAY) } else scaled
         val buf = MatOfByte()
-        val params = MatOfInt(Imgcodecs.IMWRITE_JPEG_QUALITY, if (asGray) GRAY_JPEG_QUALITY else JPEG_QUALITY)
+        val params = MatOfInt(Imgcodecs.IMWRITE_JPEG_QUALITY, if (asGray) q.grayQuality else q.jpegQuality)
         Imgcodecs.imencode(".jpg", image, buf, params)
         val bytes = buf.toArray()
         if (image !== scaled) image.release()
@@ -150,9 +155,9 @@ internal object PdfExporter {
     }
 
     /** 1-bitový obraz: bit 1 = biela, 0 = čierna (DeviceGray). */
-    private fun bilevel(doc: PDDocument, file: File): PDImageXObject {
+    private fun bilevel(doc: PDDocument, file: File, q: Quality): PDImageXObject {
         val src = Imgcodecs.imread(file.path, Imgcodecs.IMREAD_GRAYSCALE)
-        val scaled = downscale(src, BW_MAX_WIDTH)
+        val scaled = downscale(src, q.bwMaxWidth)
         Imgproc.threshold(scaled, scaled, 128.0, 255.0, Imgproc.THRESH_BINARY)
         val w = scaled.cols()
         val h = scaled.rows()

@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.outlined.BrightnessHigh
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material3.AssistChip
@@ -270,8 +271,12 @@ private fun ScannerContent(
             }
         }
 
+        val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+            if (uris.isNotEmpty()) viewModel.importImages(uris)
+        }
         ControlBar(
             state = state,
+            onImport = { pickImages.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             onCapture = viewModel::captureManually,
             onToggleAuto = viewModel::toggleAutoCapture,
             onOpenDocument = { state.documentId?.let(onOpenDocument) },
@@ -367,6 +372,7 @@ private fun ModeSelector(mode: ScanMode, onSelect: (ScanMode) -> Unit, modifier:
 @Composable
 private fun ControlBar(
     state: ScannerUiState,
+    onImport: () -> Unit,
     onCapture: () -> Unit,
     onToggleAuto: () -> Unit,
     onOpenDocument: () -> Unit,
@@ -380,26 +386,33 @@ private fun ControlBar(
         val pagesLabel = pluralStringResource(R.plurals.page_count, state.pageCount, state.pageCount)
         // Bez strán nie je čo otvoriť: náhľad je neaktívny.
         val hasPages = state.documentId != null && state.pageCount > 0
-        BadgedBox(
-            badge = { if (state.pageCount > 0) Badge { Text(state.pageCount.toString()) } },
-        ) {
-            Box(
-                Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(2.dp, Color.White.copy(alpha = if (hasPages) 1f else 0.3f), RoundedCornerShape(8.dp))
-                    .clickable(enabled = hasPages, onClick = onOpenDocument)
-                    .semantics { contentDescription = pagesLabel },
-                contentAlignment = Alignment.Center,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Import z galérie: fotky sa pridajú ako strany práve skenovaného dokumentu.
+            IconButton(onClick = onImport) {
+                Icon(Icons.Outlined.PhotoLibrary, stringResource(R.string.action_import_gallery), tint = Color.White)
+            }
+            Spacer(Modifier.width(4.dp))
+            BadgedBox(
+                badge = { if (state.pageCount > 0) Badge { Text(state.pageCount.toString()) } },
             ) {
-                val last = state.lastPage
-                if (last != null) {
-                    PageImage(last, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else {
-                    Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(30.dp))
-                }
-                if (state.processing > 0) {
-                    CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(2.dp, Color.White.copy(alpha = if (hasPages) 1f else 0.3f), RoundedCornerShape(8.dp))
+                        .clickable(enabled = hasPages, onClick = onOpenDocument)
+                        .semantics { contentDescription = pagesLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val last = state.lastPage
+                    if (last != null) {
+                        PageImage(last, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(30.dp))
+                    }
+                    if (state.processing > 0) {
+                        CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    }
                 }
             }
         }

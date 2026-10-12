@@ -44,7 +44,7 @@
     <string name="action_add_pages">Pridať strany</string>
     <string name="action_save">Uložiť</string>
     <string name="library_title">Dokumenty</string>
-    <string name="library_empty">Zatiaľ žiadne dokumenty. Ťukni na Skenovať.</string>
+    <string name="library_empty">Zatiaľ žiadne dokumenty. Naskenuj prvý list alebo importuj fotky z galérie.</string>
     <string name="selected_count">Vybrané: %d</string>
     <string name="pdf_updating">Aktualizujem PDF…</string>
     <string name="pdf_not_ready">PDF sa ešte vytvára, skús to o chvíľu.</string>
@@ -143,5 +143,61 @@
         <item quantity="few">%d strany</item>
         <item quantity="many">%d strany</item>
         <item quantity="other">%d strán</item>
+    </plurals>
+
+    <!-- Knižnica -->
+    <string name="library_location">Dokumenty/Skener</string>
+    <string name="search_hint">Hľadať aj v texte dokumentov</string>
+    <string name="search_found">Nájdené: %d (aj v texte)</string>
+    <string name="search_nothing">Pre „%s“ sa nič nenašlo.</string>
+    <string name="action_clear">Vymazať</string>
+    <string name="action_options">Možnosti</string>
+    <string name="sort_newest">Najnovšie</string>
+    <string name="sort_name">Názov</string>
+    <string name="sort_size">Veľkosť</string>
+    <string name="date_today">Dnes %s</string>
+    <string name="date_yesterday">Včera %s</string>
+    <string name="action_import_gallery">Import z galérie</string>
+    <string name="import_failed">Fotky sa nepodarilo načítať</string>
+    <string name="action_rename">Premenovať</string>
+    <string name="action_save_jpeg">Uložiť strany ako JPEG</string>
+    <string name="action_save_jpeg_hint">Do galérie, priečinok Obrázky/Skener</string>
+    <string name="action_merge">Spojiť s iným dokumentom</string>
+    <string name="action_merge_selected">Spojiť vybrané</string>
+    <string name="merge_title">Spojiť s dokumentom</string>
+    <string name="merge_hint">Strany vybraného dokumentu sa pripoja na koniec dokumentu „%s“.</string>
+    <string name="merge_none">Žiadny iný dokument nie je.</string>
+    <string name="action_pdf_compact">Zmenšiť PDF</string>
+    <string name="action_pdf_compact_hint">Menší súbor na e-mail, nižšie rozlíšenie obrázkov</string>
+    <string name="action_pdf_full">Plná kvalita PDF</string>
+    <string name="action_pdf_full_hint">PDF je teraz zmenšené</string>
+    <string name="pdf_compact_badge">zmenšené</string>
+    <string name="pdf_compact_set">PDF sa zmenšuje…</string>
+    <string name="pdf_full_quality_set">PDF sa ukladá v plnej kvalite…</string>
+    <string name="action_copy_text">Kopírovať text (OCR)</string>
+    <string name="text_none_yet">Text ešte nie je rozpoznaný</string>
+    <plurals name="document_count">
+        <item quantity="one">%d dokument</item>
+        <item quantity="few">%d dokumenty</item>
+        <item quantity="many">%d dokumentu</item>
+        <item quantity="other">%d dokumentov</item>
+    </plurals>
+    <plurals name="importing_photos">
+        <item quantity="one">Importujem fotku…</item>
+        <item quantity="few">Importujem fotky, zostávajú %d…</item>
+        <item quantity="many">Importujem fotky, zostáva %d…</item>
+        <item quantity="other">Importujem fotky, zostáva %d…</item>
+    </plurals>
+    <plurals name="jpeg_saved">
+        <item quantity="one">%d strana uložená do Obrázky/Skener</item>
+        <item quantity="few">%d strany uložené do Obrázky/Skener</item>
+        <item quantity="many">%d strany uložené do Obrázky/Skener</item>
+        <item quantity="other">%d strán uložených do Obrázky/Skener</item>
+    </plurals>
+    <plurals name="merged_pages">
+        <item quantity="one">Pripojená %1$d strana do „%2$s“</item>
+        <item quantity="few">Pripojené %1$d strany do „%2$s“</item>
+        <item quantity="many">Pripojené %1$d strany do „%2$s“</item>
+        <item quantity="other">Pripojených %1$d strán do „%2$s“</item>
     </plurals>
 </resources>

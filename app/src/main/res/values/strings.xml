@@ -44,7 +44,7 @@
     <string name="action_add_pages">Add pages</string>
     <string name="action_save">Save</string>
     <string name="library_title">Documents</string>
-    <string name="library_empty">No documents yet. Tap Scan to start.</string>
+    <string name="library_empty">No documents yet. Scan your first sheet or import photos from the gallery.</string>
     <string name="selected_count">%d selected</string>
     <string name="pdf_updating">Updating PDF…</string>
     <string name="pdf_not_ready">PDF is still being created, try again in a moment.</string>
@@ -133,5 +133,53 @@
     <plurals name="page_count">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>
+    </plurals>
+
+    <!-- Library -->
+    <string name="library_location">Documents/Skener</string>
+    <string name="search_hint">Search names and document text</string>
+    <string name="search_found">Found: %d (incl. text)</string>
+    <string name="search_nothing">Nothing found for “%s”.</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_options">Options</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_size">Size</string>
+    <string name="date_today">Today %s</string>
+    <string name="date_yesterday">Yesterday %s</string>
+    <string name="action_import_gallery">Import from gallery</string>
+    <string name="import_failed">Could not load the photos</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_save_jpeg">Save pages as JPEG</string>
+    <string name="action_save_jpeg_hint">To the gallery, Pictures/Skener</string>
+    <string name="action_merge">Merge with another document</string>
+    <string name="action_merge_selected">Merge selected</string>
+    <string name="merge_title">Merge with document</string>
+    <string name="merge_hint">Pages of the chosen document will be appended to “%s”.</string>
+    <string name="merge_none">There is no other document.</string>
+    <string name="action_pdf_compact">Compress PDF</string>
+    <string name="action_pdf_compact_hint">Smaller file for e-mail, lower image resolution</string>
+    <string name="action_pdf_full">Full quality PDF</string>
+    <string name="action_pdf_full_hint">The PDF is currently compressed</string>
+    <string name="pdf_compact_badge">compressed</string>
+    <string name="pdf_compact_set">Compressing the PDF…</string>
+    <string name="pdf_full_quality_set">Saving the PDF in full quality…</string>
+    <string name="action_copy_text">Copy text (OCR)</string>
+    <string name="text_none_yet">Text is not recognized yet</string>
+    <plurals name="document_count">
+        <item quantity="one">%d document</item>
+        <item quantity="other">%d documents</item>
+    </plurals>
+    <plurals name="importing_photos">
+        <item quantity="one">Importing photo…</item>
+        <item quantity="other">Importing photos, %d left…</item>
+    </plurals>
+    <plurals name="jpeg_saved">
+        <item quantity="one">%d page saved to Pictures/Skener</item>
+        <item quantity="other">%d pages saved to Pictures/Skener</item>
+    </plurals>
+    <plurals name="merged_pages">
+        <item quantity="one">%1$d page appended to “%2$s”</item>
+        <item quantity="other">%1$d pages appended to “%2$s”</item>
     </plurals>
 </resources>
