@@ -37,7 +37,8 @@ opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 telephoto-coil3 = { group = "me.saket.telephoto", name = "zoomable-image-coil3", version.ref = "telephoto" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
-tesseract = { group = "com.github.adaptech-cz", name = "Tesseract4Android", version.ref = "tesseract" }
+# Variant openmp: viacvláknové OCR (rýchlejšie na S25 Ultra).
+tesseract = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android-openmp", version.ref = "tesseract" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
