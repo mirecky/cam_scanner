@@ -98,6 +98,16 @@ object Filters {
         return out
     }
 
+    /**
+     * Vstup pre OCR: šedý obraz s odstráneným tieňom a nerovnomerným osvetlením.
+     * Tesseract si ho sám binarizuje; vyrovnané pozadie mu výrazne znižuje chybovosť.
+     */
+    fun ocrInput(bgr: Mat): Mat {
+        val norm = normalizedGray(bgr)
+        stretch(norm, lowPercent = 0.5, highValue = 250.0)
+        return norm
+    }
+
     /** Šedý obraz s odstráneným tieňom (pozadie ≈ 255). */
     private fun normalizedGray(bgr: Mat): Mat {
         val gray = Mat()

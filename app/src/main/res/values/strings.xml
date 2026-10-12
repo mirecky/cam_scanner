@@ -108,6 +108,24 @@
         <item quantity="other">%d pages deleted</item>
     </plurals>
 
+    <string name="text_title">Recognized text</string>
+    <string name="text_scope_page">Page %d</string>
+    <string name="text_scope_document">Document</string>
+    <string name="text_recognizing">Recognizing text…</string>
+    <string name="text_recognizing_hint">Slovak and English, offline. Usually a few seconds per page.</string>
+    <string name="text_meta">Slovak · English · %s · offline</string>
+    <string name="text_empty">No text was found on this page.</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_share_short">Share</string>
+    <string name="action_save_txt">Save TXT</string>
+    <string name="text_copied">Text copied</string>
+    <string name="text_saved">Saved as %s in Documents/Skener</string>
+    <string name="text_save_failed">Saving failed</string>
+    <plurals name="word_count">
+        <item quantity="one">%d word</item>
+        <item quantity="other">%d words</item>
+    </plurals>
+
     <plurals name="page_count">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>

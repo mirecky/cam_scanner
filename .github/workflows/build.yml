@@ -25,6 +25,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      - name: Jazykové modely OCR (tessdata_best, slovenčina a angličtina)
+        run: |
+          mkdir -p app/src/main/assets/tessdata
+          for l in slk eng; do
+            curl -fsSL -o app/src/main/assets/tessdata/$l.traineddata \
+              "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/$l.traineddata"
+          done
+          ls -la app/src/main/assets/tessdata
+
       - name: Príprava podpisového kľúča (ak je nastavený v Secrets)
         env:
           KEYSTORE_BASE64: ${{ secrets.SKENER_KEYSTORE_BASE64 }}

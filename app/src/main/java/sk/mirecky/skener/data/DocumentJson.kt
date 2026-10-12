@@ -29,6 +29,7 @@ internal object DocumentJson {
                     .put("mode", page.mode.name)
                     .put("rotation", page.rotation)
                     .put("version", page.version)
+                    .put("cropVersion", page.cropVersion)
                     .put("quad", page.quad?.let { q -> JSONArray(q.corners.flatMap { listOf(it.x, it.y) }) } ?: JSONObject.NULL)
             }))
         val tmp = File(doc.dir, "$FILE.tmp")
@@ -56,6 +57,7 @@ internal object DocumentJson {
                         Quad(Pt(v[0], v[1]), Pt(v[2], v[3]), Pt(v[4], v[5]), Pt(v[6], v[7]))
                     },
                     version = p.optLong("version", 0),
+                    cropVersion = p.optLong("cropVersion", p.optLong("version", 0)),
                 )
             }.filter { it.displayFile.exists() }
         }

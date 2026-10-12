@@ -5,6 +5,9 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
 import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
 import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
+import com.tom_roush.pdfbox.pdmodel.font.PDFont
+import com.tom_roush.pdfbox.pdmodel.font.PDType0Font
+import com.tom_roush.pdfbox.pdmodel.graphics.state.RenderingMode
 import com.tom_roush.pdfbox.pdmodel.graphics.color.PDDeviceGray
 import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
@@ -18,6 +21,7 @@ import sk.mirecky.skener.scanner.PageFilter
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 
@@ -26,6 +30,7 @@ import java.util.zip.DeflaterOutputStream
  *
  * Čiernobiele strany sa ukladajú bezstratovo ako 1-bitový obraz (300 dpi pre A4, Flate),
  * ostatné ako JPEG (200 dpi pre A4). Šírka strany PDF zodpovedá A4 (210 mm), výška pomeru obrazu.
+ * Ak je k strane k dispozícii OCR, pridá sa neviditeľná textová vrstva (vyhľadávanie, kopírovanie).
  */
 internal object PdfExporter {
 
@@ -34,16 +39,53 @@ internal object PdfExporter {
     private const val JPEG_MAX_WIDTH = 1654 // 200 dpi na šírku A4
     private const val JPEG_QUALITY = 80
 
-    fun export(pages: List<PageItem>, target: File) {
+    fun export(pages: List<PageItem>, target: File, ocr: (PageItem) -> OcrResult?, font: () -> InputStream) {
         PDDocument().use { doc ->
+            // Písmo na textovú vrstvu sa načíta len raz a vloží sa len podmnožina použitých znakov.
+            val textFont: PDFont? by lazy { runCatching { font().use { PDType0Font.load(doc, it, true) } }.getOrNull() }
             for (page in pages) {
                 val image = if (page.filter == PageFilter.BLACK_WHITE) bilevel(doc, page.displayFile) else jpeg(doc, page.displayFile)
                 val height = PAGE_WIDTH_PT * image.height / image.width
                 val pdfPage = PDPage(PDRectangle(PAGE_WIDTH_PT, height))
                 doc.addPage(pdfPage)
-                PDPageContentStream(doc, pdfPage).use { it.drawImage(image, 0f, 0f, PAGE_WIDTH_PT, height) }
+                PDPageContentStream(doc, pdfPage).use { cs ->
+                    cs.drawImage(image, 0f, 0f, PAGE_WIDTH_PT, height)
+                    val result = ocr(page)
+                    val f = textFont
+                    if (result != null && result.words.isNotEmpty() && f != null) drawTextLayer(cs, f, result, height)
+                }
             }
             doc.save(target)
+        }
+    }
+
+    /** Neviditeľný text presne nad slovami v obraze (každé slovo roztiahnuté na šírku svojho rámčeka). */
+    private fun drawTextLayer(cs: PDPageContentStream, font: PDFont, ocr: OcrResult, pageHeight: Float) {
+        val scale = PAGE_WIDTH_PT / ocr.width
+        val descriptor = font.fontDescriptor
+        val ascent = (descriptor?.ascent ?: 900f) / 1000f
+        val descent = (descriptor?.descent ?: -200f) / 1000f
+        val lineHeight = (ascent - descent).coerceAtLeast(0.5f)
+        for (word in ocr.words) {
+            try {
+                val boxH = word.h * scale
+                val boxW = word.w * scale
+                val size = (boxH / lineHeight).coerceIn(2f, 200f)
+                val textWidth = font.getStringWidth(word.text) / 1000f * size
+                if (textWidth <= 0f) continue
+                val x = word.x * scale
+                val y = pageHeight - (word.y + word.h) * scale - descent * size
+                cs.beginText()
+                cs.setRenderingMode(RenderingMode.NEITHER)
+                cs.setFont(font, size)
+                cs.setHorizontalScaling(boxW / textWidth * 100f)
+                cs.newLineAtOffset(x, y)
+                cs.showText(word.text)
+                cs.endText()
+            } catch (e: Exception) {
+                // Znak, ktorý písmo nepozná – slovo sa vynechá, ostatné ostanú vyhľadávateľné.
+                runCatching { cs.endText() }
+            }
         }
     }
 

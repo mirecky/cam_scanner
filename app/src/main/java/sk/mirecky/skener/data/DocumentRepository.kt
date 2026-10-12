@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import sk.mirecky.skener.R
 import sk.mirecky.skener.scanner.Adjust
 import sk.mirecky.skener.scanner.PageFilter
 import sk.mirecky.skener.scanner.Quad
@@ -52,7 +53,61 @@ class DocumentRepository(private val context: Context) {
     /** Dokumenty, ktorých PDF sa práve aktualizuje. */
     val exporting: StateFlow<Set<String>> = _exporting.asStateFlow()
 
+    private val ocrEngine = OcrEngine(context)
+    /** OCR beží postupne na jednom vlákne (Tesseract nie je vláknovo bezpečný). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val ocrDispatcher = Dispatchers.IO.limitedParallelism(1)
+    private var ocrJob: Job? = null
+
+    private val _ocrPending = MutableStateFlow<Set<String>>(emptySet())
+    /** Strany (ID), ktoré čakajú na OCR alebo sa práve rozpoznávajú. */
+    val ocrPending: StateFlow<Set<String>> = _ocrPending.asStateFlow()
+
+    private val _ocrRevision = MutableStateFlow(0L)
+    /** Zvýši sa po každej rozpoznanej strane (podnet pre UI načítať text znova). */
+    val ocrRevision: StateFlow<Long> = _ocrRevision.asStateFlow()
+
     fun document(id: String): DocumentItem? = _documents.value.firstOrNull { it.id == id }
+
+    /** Výsledok OCR strany, ak je aktuálny vzhľadom na jej orez. */
+    fun ocr(page: PageItem): OcrResult? =
+        OcrResult.read(page.ocrFile)?.takeIf { it.cropVersion == page.cropVersion }
+
+    /** Text celého dokumentu (strany oddelené prázdnym riadkom). */
+    fun documentText(docId: String): String =
+        document(docId)?.pages.orEmpty().mapNotNull { ocr(it)?.text?.takeIf(String::isNotBlank) }.joinToString("\n\n")
+
+    /**
+     * Rozpozná text na stranách, ktoré ho ešte nemajú (alebo majú zastaraný). Po každom dokumente
+     * sa aktualizuje PDF, aby obsahovalo textovú vrstvu.
+     */
+    private fun scheduleOcr() {
+        if (ocrJob?.isActive == true) return
+        ocrJob = scope.launch(ocrDispatcher) {
+            while (true) {
+                val todo = _documents.value.flatMap { doc -> doc.pages.map { doc.id to it } }
+                    .filter { (_, p) -> ocr(p) == null && p.cropFile.exists() }
+                _ocrPending.value = todo.map { it.second.id }.toSet()
+                val (docId, page) = todo.firstOrNull() ?: break
+                try {
+                    val result = ocrEngine.recognize(page.cropFile, page.cropVersion)
+                    page.ocrFile.writeText(result.toJson())
+                } catch (e: Throwable) {
+                    Log.e(TAG, "OCR strany zlyhalo", e)
+                    // Prázdny výsledok, aby sa chybná strana neopakovala donekonečna.
+                    page.ocrFile.writeText(OcrResult(page.cropVersion, 1, 1, "", emptyList()).toJson())
+                }
+                _ocrRevision.value += 1
+                val docDone = document(docId)?.pages.orEmpty().none { ocr(it) == null }
+                if (docDone) schedulePdf(docId)
+            }
+            _ocrPending.value = emptySet()
+        }
+    }
+
+    init {
+        scheduleOcr()
+    }
 
     /** Vyhradí miesto pre novú stranu; ak [docId] je null, nová strana založí nový dokument. */
     fun reservePage(docId: String?): PageSlot {
@@ -136,7 +191,7 @@ class DocumentRepository(private val context: Context) {
         withContext(Dispatchers.Default) { targets.forEach { PageRenderer.rotateClockwise(it.cropFile, it.displayFile) } }
         val now = System.currentTimeMillis()
         modify(docId) { d ->
-            d.copy(pages = d.pages.map { p -> if (p.id in pageIds) p.copy(rotation = (p.rotation + 90) % 360, version = now) else p })
+            d.copy(pages = d.pages.map { p -> if (p.id in pageIds) p.copy(rotation = (p.rotation + 90) % 360, version = now, cropVersion = now) else p })
         }
     }
 
@@ -177,7 +232,7 @@ class DocumentRepository(private val context: Context) {
             )
         }
         val now = System.currentTimeMillis()
-        modify(docId) { d -> d.copy(pages = d.pages.map { p -> if (p.id == pageId) p.copy(quad = quad, version = now) else p }) }
+        modify(docId) { d -> d.copy(pages = d.pages.map { p -> if (p.id == pageId) p.copy(quad = quad, version = now, cropVersion = now) else p }) }
     }
 
     /**
@@ -245,6 +300,7 @@ class DocumentRepository(private val context: Context) {
             next
         }
         schedulePdf(updated.id)
+        scheduleOcr()
     }
 
     private fun schedulePdf(docId: String) {
@@ -263,7 +319,7 @@ class DocumentRepository(private val context: Context) {
         _exporting.update { it + docId }
         try {
             val tmp = File(context.cacheDir, "$docId.pdf")
-            PdfExporter.export(doc.pages, tmp)
+            PdfExporter.export(doc.pages, tmp, ocr = ::ocr, font = { context.resources.openRawResource(R.font.onest_regular) })
             val uri = pdfStore.write(doc.name, doc.pdfUri?.let(Uri::parse), tmp)
             tmp.delete()
             if (uri.toString() != doc.pdfUri) {

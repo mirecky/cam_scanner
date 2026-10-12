@@ -22,6 +22,8 @@ data class PageItem(
     val quad: Quad?,
     /** Zvyšuje sa pri každej zmene obrazu strany (kľúč pre vyrovnávaciu pamäť náhľadov). */
     val version: Long,
+    /** Mení sa len pri zmene orezu (nové snímanie, orez, otočenie); OCR sa viaže naň. */
+    val cropVersion: Long = version,
 ) {
     /** Pôvodná fotografia z kamery. */
     val originalFile: File get() = File(dir, "original.jpg")
@@ -30,6 +32,8 @@ data class PageItem(
     /** Výsledná strana po filtri (zobrazuje sa a ide do PDF). */
     val displayFile: File get() = File(dir, "display.jpg")
     val cacheKey: String get() = "${dir.path}:$version"
+    /** Výsledok OCR (pozri [OcrResult]). */
+    val ocrFile: File get() = File(dir, "ocr.json")
 }
 
 /** Dokument = jedno PDF zložené zo strán. */

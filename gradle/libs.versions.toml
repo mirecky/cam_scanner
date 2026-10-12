@@ -14,6 +14,7 @@ opencv = "4.12.0"
 telephoto = "0.18.0"
 reorderable = "2.5.1"
 pdfbox = "2.0.27.0"
+tesseract = "4.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +37,7 @@ opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 telephoto-coil3 = { group = "me.saket.telephoto", name = "zoomable-image-coil3", version.ref = "telephoto" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
+tesseract = { group = "com.github.adaptech-cz", name = "Tesseract4Android", version.ref = "tesseract" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

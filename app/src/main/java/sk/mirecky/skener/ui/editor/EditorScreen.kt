@@ -151,6 +151,8 @@ fun EditorScreen(
     var tool by rememberSaveable { mutableStateOf<Tool?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showText by rememberSaveable { mutableStateOf(false) }
+    val ocrPending by repository.ocrPending.collectAsStateWithLifecycle()
     val snackbar = app.snackbar
 
     LaunchedEffect(pages.size) {
@@ -325,9 +327,7 @@ fun EditorScreen(
                 ToolButton(Icons.Outlined.CleaningServices, R.string.tool_clean, upcoming = true) {
                     Toast.makeText(context, R.string.tool_upcoming, Toast.LENGTH_SHORT).show()
                 }
-                ToolButton(Icons.Outlined.TextFields, R.string.tool_text, upcoming = true) {
-                    Toast.makeText(context, R.string.tool_upcoming, Toast.LENGTH_SHORT).show()
-                }
+                ToolButton(Icons.Outlined.TextFields, R.string.tool_text, active = showText, badge = page.id in ocrPending) { showText = true }
                 ToolButton(Icons.Outlined.Delete, R.string.action_delete) {
                     if (pages.size == 1) {
                         // Posledná strana: zmizol by celý dokument, preto potvrdenie.
@@ -371,6 +371,10 @@ fun EditorScreen(
                 ) { Text(stringResource(R.string.action_share), fontWeight = FontWeight.SemiBold) }
             }
         }
+    }
+
+    if (showText) {
+        TextSheet(doc = doc, page = page, pageNumber = current + 1, onDismiss = { showText = false })
     }
 
     if (confirmDelete) {
@@ -508,7 +512,14 @@ private fun ThumbnailStrip(
 }
 
 @Composable
-private fun ToolButton(icon: ImageVector, label: Int, active: Boolean = false, upcoming: Boolean = false, onClick: () -> Unit) {
+private fun ToolButton(
+    icon: ImageVector,
+    label: Int,
+    active: Boolean = false,
+    upcoming: Boolean = false,
+    badge: Boolean = false,
+    onClick: () -> Unit,
+) {
     val color = when {
         active -> SkenerColors.Accent
         upcoming -> SkenerColors.Muted.copy(alpha = 0.5f)
@@ -518,7 +529,17 @@ private fun ToolButton(icon: ImageVector, label: Int, active: Boolean = false, u
         Modifier.width(68.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = null, tint = color)
+        Box {
+            Icon(icon, contentDescription = null, tint = color)
+            if (badge) {
+                // Prebieha rozpoznávanie textu tejto strany.
+                CircularProgressIndicator(
+                    Modifier.align(Alignment.TopEnd).size(10.dp),
+                    color = SkenerColors.Accent,
+                    strokeWidth = 1.5.dp,
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
         Text(stringResource(label), style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
     }

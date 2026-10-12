@@ -114,6 +114,26 @@
         <item quantity="other">Zmazaných %d strán</item>
     </plurals>
 
+    <string name="text_title">Rozpoznaný text</string>
+    <string name="text_scope_page">Strana %d</string>
+    <string name="text_scope_document">Dokument</string>
+    <string name="text_recognizing">Rozpoznávam text…</string>
+    <string name="text_recognizing_hint">Slovenčina a angličtina, offline. Zvyčajne pár sekúnd na stranu.</string>
+    <string name="text_meta">slovenčina · angličtina · %s · offline</string>
+    <string name="text_empty">Na tejto strane sa nenašiel žiadny text.</string>
+    <string name="action_copy">Kopírovať</string>
+    <string name="action_share_short">Zdieľať</string>
+    <string name="action_save_txt">Uložiť TXT</string>
+    <string name="text_copied">Text skopírovaný</string>
+    <string name="text_saved">Uložené ako %s v Dokumenty/Skener</string>
+    <string name="text_save_failed">Uloženie zlyhalo</string>
+    <plurals name="word_count">
+        <item quantity="one">%d slovo</item>
+        <item quantity="few">%d slová</item>
+        <item quantity="many">%d slova</item>
+        <item quantity="other">%d slov</item>
+    </plurals>
+
     <plurals name="page_count">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>

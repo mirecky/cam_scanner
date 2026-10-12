@@ -59,6 +59,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Modely OCR sa čítajú cez file descriptor, preto nesmú byť v APK komprimované.
+    androidResources {
+        noCompress += "traineddata"
+    }
 }
 
 kotlin {
@@ -90,6 +95,7 @@ dependencies {
     // Šifrovanie PDF nepoužívame, BouncyCastle by zbytočne zväčšil aplikáciu.
     implementation(libs.pdfbox.android) { exclude(group = "org.bouncycastle") }
     implementation(libs.opencv)
+    implementation(libs.tesseract)
 
     testImplementation(libs.junit)
 }
