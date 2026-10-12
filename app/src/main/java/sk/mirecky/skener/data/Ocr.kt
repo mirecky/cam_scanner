@@ -42,13 +42,58 @@ data class OcrResult(
                 cropVersion = j.getLong("cropVersion"),
                 width = j.getInt("width"),
                 height = j.getInt("height"),
-                text = j.getString("text"),
-                words = (0 until arr.length()).map { i ->
+                // Opravy sa uplatnia aj na výsledky uložené staršou verziou (sú idempotentné).
+                text = OcrLines.fixText(j.getString("text")),
+                words = OcrLines.fixWords((0 until arr.length()).map { i ->
                     val w = arr.getJSONArray(i)
                     OcrWord(w.getString(0), w.getInt(1), w.getInt(2), w.getInt(3), w.getInt(4))
-                },
+                }),
             )
         }.getOrNull()
+    }
+}
+
+/** Zoskupenie slov do riadkov a oprava typických chýb rozpoznávania. */
+internal object OcrLines {
+
+    /**
+     * Slová (v poradí čítania od Tesseractu) rozdelí do riadkov: nový riadok začína, keď sa
+     * slovo vráti doľava alebo sa zvislo neprekrýva s predchádzajúcim slovom.
+     */
+    fun group(words: List<OcrWord>): List<List<OcrWord>> {
+        val lines = ArrayList<MutableList<OcrWord>>()
+        var current: MutableList<OcrWord>? = null
+        for (w in words) {
+            val prev = current?.lastOrNull()
+            val sameLine = prev != null && w.x >= prev.x + prev.w / 2 && overlap(prev, w) > 0.4
+            if (!sameLine) current = ArrayList<OcrWord>().also { lines += it }
+            current!!.add(w)
+        }
+        return lines
+    }
+
+    private fun overlap(a: OcrWord, b: OcrWord): Float {
+        val inter = minOf(a.y + a.h, b.y + b.h) - maxOf(a.y, b.y)
+        return inter.toFloat() / minOf(a.h, b.h).coerceAtLeast(1)
+    }
+
+    /** Odrážky, ktoré Tesseract číta ako „+“, „«“, „©“ a pod. (len samostatné na začiatku riadku). */
+    private val BULLET = Regex("^[+«»©®*°¢•]{1,2}$")
+    private val TEXT_BULLET = Regex("(?m)^([ \\t]*)[+«»©®*°¢]{1,2}(?=[ \\t]+\\S)")
+    /** Vlnovka „~70“ prečítaná ako pomlčka tesne pred číslom. */
+    private val TILDE = Regex("(^|[\\s(])—(?=\\d)")
+
+    fun fixText(text: String): String =
+        text.replace(TEXT_BULLET, "$1•").replace(TILDE, "$1~")
+
+    fun fixWords(words: List<OcrWord>): List<OcrWord> {
+        val lineStarts = group(words).mapNotNull { it.firstOrNull() }.toHashSet()
+        return words.map { w ->
+            var t = w.text
+            if (w in lineStarts && BULLET.matches(t)) t = "•"
+            if (t.length > 1 && t[0] == '—' && t[1].isDigit()) t = "~" + t.substring(1)
+            if (t == w.text) w else w.copy(text = t)
+        }
     }
 }
 
@@ -104,7 +149,7 @@ internal class OcrEngine(private val context: Context) {
 
         val tess = ensureApi()
         tess.setImage(bytes, w, h, 1, w)
-        val text = tess.getUTF8Text().orEmpty().trim()
+        val text = OcrLines.fixText(tess.getUTF8Text().orEmpty().trim())
         val words = ArrayList<OcrWord>()
         tess.getResultIterator()?.let { it ->
             it.begin()
@@ -119,7 +164,7 @@ internal class OcrEngine(private val context: Context) {
         }
         tess.clear()
         Log.d(TAG, "OCR: ${words.size} slov (${w}×$h)")
-        return OcrResult(cropVersion, w, h, text, words)
+        return OcrResult(cropVersion, w, h, text, OcrLines.fixWords(words))
     }
 
     /** Najviac 300 dpi na šírku A4 – vyššie rozlíšenie OCR nespresní, len spomalí. */

@@ -55,6 +55,7 @@
     <string name="filter_bw">Čiernobiely</string>
     <string name="filter_gray">Odtiene šedej</string>
     <string name="filter_color">Farebný</string>
+    <string name="filter_natural">Prirodzený</string>
     <string name="filter_whiteboard">Tabuľa</string>
     <string name="filter_original">Originál</string>
     <string name="exposure_label">Jas %s EV</string>

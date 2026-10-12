@@ -553,19 +553,21 @@ private fun FilterPanel(
     onApplyAll: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().background(SkenerColors.Panel).padding(vertical = 8.dp)) {
+        // Všetky filtre sa zmestia na šírku displeja (bez posúvania), aby žiaden nebol skrytý.
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             for (filter in PageFilter.entries) {
                 val selected = filter == edit.filter
                 Column(
-                    Modifier.width(64.dp).clickable { onEdit(edit.copy(filter = filter, level = 0)) },
+                    Modifier.weight(1f).clickable { onEdit(edit.copy(filter = filter, level = 0)) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
                         Modifier
-                            .size(width = 56.dp, height = 76.dp)
+                            .fillMaxWidth()
+                            .aspectRatio(56f / 76f)
                             .clip(RoundedCornerShape(6.dp))
                             .background(SkenerColors.Raise)
                             .border(if (selected) 2.dp else 1.dp, if (selected) SkenerColors.Accent else SkenerColors.Line, RoundedCornerShape(6.dp)),
@@ -584,6 +586,8 @@ private fun FilterPanel(
                         style = MaterialTheme.typography.labelSmall,
                         color = if (selected) SkenerColors.Accent else SkenerColors.Muted,
                         maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -661,6 +665,7 @@ internal fun PageFilter.label() = when (this) {
     PageFilter.BLACK_WHITE -> R.string.filter_bw
     PageFilter.GRAYSCALE -> R.string.filter_gray
     PageFilter.COLOR -> R.string.filter_color
+    PageFilter.NATURAL -> R.string.filter_natural
     PageFilter.WHITEBOARD -> R.string.filter_whiteboard
     PageFilter.ORIGINAL -> R.string.filter_original
 }
@@ -668,7 +673,7 @@ internal fun PageFilter.label() = when (this) {
 private fun PageFilter.parameterLabel() = when (this) {
     PageFilter.BLACK_WHITE -> R.string.param_ink
     PageFilter.GRAYSCALE -> R.string.param_contrast
-    PageFilter.COLOR, PageFilter.WHITEBOARD -> R.string.param_saturation
+    PageFilter.COLOR, PageFilter.NATURAL, PageFilter.WHITEBOARD -> R.string.param_saturation
     PageFilter.ORIGINAL -> R.string.param_brightness
 }
 

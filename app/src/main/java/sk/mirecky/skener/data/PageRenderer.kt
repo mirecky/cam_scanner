@@ -48,7 +48,8 @@ internal object PageRenderer {
 
         val cropped = if (quad != null) {
             val snap = if (mode == ScanMode.DOCUMENT) ImageOps.A4_RATIO else null
-            ImageOps.cropDocument(bgr, quad, snap, inset = EDGE_INSET).also { bgr.release() }
+            val margin = if (mode == ScanMode.DOCUMENT) DOCUMENT_MARGIN else WHITEBOARD_MARGIN
+            ImageOps.cropDocument(bgr, quad, snap, margin).also { bgr.release() }
         } else {
             bgr
         }
@@ -103,6 +104,10 @@ internal object PageRenderer {
         if (!tmp.renameTo(target)) error("Premenovanie ${target.name} zlyhalo")
     }
 
-    /** Odrezanie okraja strany (podiel), aby na hrane neostal tmavý prúžok podkladu. */
-    private const val EDGE_INSET = 0.004
+    /**
+     * Odrezanie okraja strany (podiel kratšej strany), aby na hrane neostal tmavý prúžok podkladu.
+     * Dokument: 2 mm z 210 mm šírky A4 – tlačiarne aj tak netlačia bližšie ako 3–5 mm od okraja.
+     */
+    private const val DOCUMENT_MARGIN = 2.0 / 210.0
+    private const val WHITEBOARD_MARGIN = 0.004
 }

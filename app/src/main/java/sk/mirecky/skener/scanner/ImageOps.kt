@@ -75,14 +75,17 @@ object ImageOps {
      *
      * Ak je zadaný [snapRatio] a nameraný pomer strán sa od neho líši najviac o [SNAP_TOLERANCE],
      * výstup sa prispôsobí presne tomuto pomeru (napr. A4), čím sa odstráni skreslenie z perspektívy.
+     *
+     * [margin] (podiel kratšej strany) odreže na každej strane pás papiera, aby na hrane neostal
+     * tmavý prúžok podkladu ani tieň okraja listu. Odrezanie sa počíta vo vyrovnanej strane,
+     * takže je rovnako široké po celom obvode aj pri šikmom zábere; rozmery výstupu sa nemenia.
      */
-    fun cropDocument(src: Mat, quad: Quad, snapRatio: Double? = null, inset: Double = 0.0): Mat {
+    fun cropDocument(src: Mat, quad: Quad, snapRatio: Double? = null, margin: Double = 0.0): Mat {
         val w = src.cols().toDouble()
         val h = src.rows().toDouble()
         fun d(a: Pt, b: Pt) = hypot((a.x - b.x) * w, (a.y - b.y) * h)
         var outW = max(d(quad.tl, quad.tr), d(quad.bl, quad.br))
         var outH = max(d(quad.tl, quad.bl), d(quad.tr, quad.br))
-        val target = if (inset > 0) insetQuad(quad, inset) else quad
         if (snapRatio != null) {
             val portrait = outH >= outW
             val measured = if (portrait) outH / outW else outW / outH
@@ -91,31 +94,38 @@ object ImageOps {
                 if (portrait) outW = outH / snapRatio else outH = outW / snapRatio
             }
         }
-        return warp(
-            src, target,
-            outW.roundToInt().coerceAtLeast(1), outH.roundToInt().coerceAtLeast(1),
-            Imgproc.INTER_CUBIC,
-        )
+        val ow = outW.roundToInt().coerceAtLeast(1)
+        val oh = outH.roundToInt().coerceAtLeast(1)
+        // Rohy celého listu sa zobrazia mimo výstupu: vnútro zmenšené o okraj m vyplní celý výstup.
+        val m = (minOf(ow, oh) * margin.coerceIn(0.0, 0.2))
+        val kx = ow / (ow - 2 * m)
+        val ky = oh / (oh - 2 * m)
+        val x0 = -m * kx
+        val y0 = -m * ky
+        val x1 = (ow - m) * kx
+        val y1 = (oh - m) * ky
+        return warp(src, quad, ow, oh, Imgproc.INTER_CUBIC, Rect4(x0, y0, x1, y1))
     }
 
-    /** Posunie rohy o [fraction] smerom k ťažisku (odreže tmavý okraj podkladu na hrane papiera). */
-    private fun insetQuad(q: Quad, fraction: Double): Quad {
-        val cx = q.corners.sumOf { it.x } / 4
-        val cy = q.corners.sumOf { it.y } / 4
-        fun p(pt: Pt) = Pt(pt.x + (cx - pt.x) * fraction * 2, pt.y + (cy - pt.y) * fraction * 2)
-        return Quad(p(q.tl), p(q.tr), p(q.br), p(q.bl))
-    }
+    private data class Rect4(val x0: Double, val y0: Double, val x1: Double, val y1: Double)
 
     /** Najväčšia relatívna odchýlka nameraného pomeru strán, pri ktorej sa ešte prispôsobí formátu. */
     private const val SNAP_TOLERANCE = 0.15
 
-    private fun warp(src: Mat, quad: Quad, outW: Int, outH: Int, interpolation: Int): Mat {
+    private fun warp(
+        src: Mat,
+        quad: Quad,
+        outW: Int,
+        outH: Int,
+        interpolation: Int,
+        target: Rect4 = Rect4(0.0, 0.0, outW.toDouble(), outH.toDouble()),
+    ): Mat {
         val w = src.cols().toDouble()
         val h = src.rows().toDouble()
         val from = MatOfPoint2f(*quad.corners.map { Point(it.x * w, it.y * h) }.toTypedArray())
         val to = MatOfPoint2f(
-            Point(0.0, 0.0), Point(outW.toDouble(), 0.0),
-            Point(outW.toDouble(), outH.toDouble()), Point(0.0, outH.toDouble()),
+            Point(target.x0, target.y0), Point(target.x1, target.y0),
+            Point(target.x1, target.y1), Point(target.x0, target.y1),
         )
         val m = Imgproc.getPerspectiveTransform(from, to)
         val out = Mat()

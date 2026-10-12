@@ -55,6 +55,7 @@
     <string name="filter_bw">Black &amp; white</string>
     <string name="filter_gray">Grayscale</string>
     <string name="filter_color">Color</string>
+    <string name="filter_natural">Natural</string>
     <string name="filter_whiteboard">Whiteboard</string>
     <string name="filter_original">Original</string>
     <string name="exposure_label">Brightness %s EV</string>
