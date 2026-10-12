@@ -18,8 +18,13 @@ data class Detection(
     val contrast: Double,
     /** Podiel plochy záberu, ktorý dokument zaberá (0..1). */
     val areaFraction: Double,
-    /** Ostrosť: rozptyl Laplaceovho operátora vo vnútri dokumentu. */
+    /** Ostrosť: rozptyl Laplaceovho operátora vo vnútri dokumentu (závisí od množstva textu). */
     val sharpness: Double,
+    /**
+     * Ostrosť nezávislá od množstva textu: pomer [sharpness] k rozptylu po ďalšom rozmazaní obrazu.
+     * Ostrý obraz ďalšie rozmazanie výrazne zmení (vysoký pomer), rozmazaný takmer vôbec.
+     */
+    val sharpRatio: Double,
 )
 
 /** Hraničné hodnoty pre overenie, že nájdený štvoruholník je skutočne dokument (F2). */
@@ -76,14 +81,21 @@ class DocumentDetector {
     /** Voliteľný záznam dôvodov zamietnutia kandidátov (na ladenie a testy). */
     var log: ((String) -> Unit)? = null
 
+    /** Pri poslednej detekcii bol zamietnutý tvar dokumentu len preto, že presahuje okraj záberu. */
+    var outOfFrame = false
+        private set
+
     private val blurred = Mat()
     private val edges = Mat()
     private val binary = Mat()
+    private val reblurred = Mat()
+    private val lap = Mat()
     private val kernel3 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
     private val kernel5 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
 
     fun detect(gray: Mat, mode: ScanMode): Detection? {
         val criteria = DetectionCriteria.forMode(mode)
+        outOfFrame = false
         Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
         // Citlivejší druhý prechod (nižšie prahy Cannyho detektora) v testoch zvyšoval počet falošných
         // nálezov viac, než pomáhal pri bielom papieri na bielom stole; ten prípad rieši až model (F1).
@@ -182,6 +194,11 @@ class DocumentDetector {
 
     private fun evaluate(quad: Quad, gray: Mat, w: Double, h: Double, c: DetectionCriteria): Detection? {
         val contrast = minSideContrast(quad, w, h, c.insideBrighter)
+        if (contrast == null) {
+            outOfFrame = true
+            log?.invoke("zamietnutý $quad: presahuje záber")
+            return null
+        }
         if (contrast < c.minSideContrast) {
             log?.invoke("zamietnutý $quad: kontrast strany %.1f".format(contrast))
             return null
@@ -201,23 +218,31 @@ class DocumentDetector {
             return null
         }
 
-        val lap = Mat()
-        Imgproc.Laplacian(gray, lap, CvType.CV_64F)
+        val sharpness = laplacianVariance(gray, mask)
+        Imgproc.GaussianBlur(gray, reblurred, Size(0.0, 0.0), REBLUR_SIGMA)
+        val sharpRatio = sharpness / laplacianVariance(reblurred, mask).coerceAtLeast(1e-3)
+        mask.release()
+
+        return Detection(quad, contrast, quad.area(), sharpness, sharpRatio)
+    }
+
+    private fun laplacianVariance(src: Mat, mask: Mat): Double {
+        Imgproc.Laplacian(src, lap, CvType.CV_64F)
         val mean = org.opencv.core.MatOfDouble()
         val std = org.opencv.core.MatOfDouble()
         Core.meanStdDev(lap, mean, std, mask)
-        val sharpness = std.toArray()[0].let { it * it }
-        lap.release(); mean.release(); std.release(); mask.release()
-
-        return Detection(quad, contrast, quad.area(), sharpness)
+        val v = std.toArray()[0].let { it * it }
+        mean.release(); std.release()
+        return v
     }
 
     /**
      * Pre každú stranu porovná jas tesne vnútri a tesne vonku (vzorky po normále strany)
      * a vráti najmenší z mediánov rozdielov. Skutočný okraj papiera má vnútri svetlejšie
      * než vonku po celej dĺžke; vzor látky ani čiara vo vnútri listu túto podmienku nesplnia.
+     * Vráti null, ak niektorá strana leží pri okraji záberu (dokument presahuje záber).
      */
-    private fun minSideContrast(quad: Quad, w: Double, h: Double, insideBrighter: Boolean): Double {
+    private fun minSideContrast(quad: Quad, w: Double, h: Double, insideBrighter: Boolean): Double? {
         val c = quad.corners.map { Pair(it.x * w, it.y * h) }
         val cx = c.sumOf { it.first } / 4
         val cy = c.sumOf { it.second } / 4
@@ -250,7 +275,7 @@ class DocumentDetector {
                 diffs[n++] = if (insideBrighter) d else kotlin.math.abs(d)
             }
             // Strana pri okraji záberu (dokument presahuje záber) nemá vonkajšie vzorky.
-            if (n < SAMPLES_PER_SIDE / 2) return 0.0
+            if (n < SAMPLES_PER_SIDE / 2) return null
             val sorted = diffs.copyOf(n).also { it.sort() }
             worst = minOf(worst, sorted[n / 2])
         }
@@ -258,7 +283,7 @@ class DocumentDetector {
     }
 
     fun release() {
-        listOf(blurred, edges, binary, kernel3, kernel5).forEach { it.release() }
+        listOf(blurred, edges, binary, reblurred, lap, kernel3, kernel5).forEach { it.release() }
     }
 
     private companion object {
@@ -268,5 +293,7 @@ class DocumentDetector {
         /** Vzdialenosť vzoriek od strany v pixeloch analyzovaného obrazu. */
         const val CONTRAST_OFFSET = 6.0
         val EPSILONS = doubleArrayOf(0.02, 0.03, 0.04, 0.06)
+        /** Ďalšie rozmazanie pri meraní ostrosti nezávislej od obsahu. */
+        const val REBLUR_SIGMA = 1.5
     }
 }

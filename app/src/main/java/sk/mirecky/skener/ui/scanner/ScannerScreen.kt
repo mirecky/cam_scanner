@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BrightnessMedium
@@ -216,6 +217,7 @@ private fun ScannerContent(
                 state,
                 retaking = retake != null,
                 onCancelRetake = viewModel::cancelRetake,
+                onCaptureAnyway = viewModel::captureManually,
                 debug = if (showDebug) overlay.debug else null,
                 onClick = { showDebug = !showDebug },
                 modifier = Modifier.weight(1f),
@@ -287,6 +289,7 @@ private fun StatusBar(
     state: ScannerUiState,
     retaking: Boolean,
     onCancelRetake: () -> Unit,
+    onCaptureAnyway: () -> Unit,
     debug: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -298,10 +301,12 @@ private fun StatusBar(
         ScanStatus.SAVING -> R.string.status_saving
         ScanStatus.CAPTURED -> R.string.status_captured
         ScanStatus.SAME_SHEET -> R.string.status_same_sheet
+        ScanStatus.FOCUSING -> R.string.status_focusing
+        ScanStatus.OUT_OF_FRAME -> R.string.status_out_of_frame
         ScanStatus.ERROR -> R.string.status_error
     }
     val container = when (state.status) {
-        ScanStatus.CAPTURED, ScanStatus.HOLD_STILL, ScanStatus.READY_MANUAL -> MaterialTheme.colorScheme.primaryContainer
+        ScanStatus.CAPTURED, ScanStatus.HOLD_STILL, ScanStatus.READY_MANUAL, ScanStatus.FOCUSING -> MaterialTheme.colorScheme.primaryContainer
         ScanStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
@@ -311,6 +316,15 @@ private fun StatusBar(
                 text = stringResource(text),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
+        // Automat čaká na iný list; ak je to predsa nový list (rovnaký formulár), dá sa nasnímať hneď.
+        if (state.status == ScanStatus.SAME_SHEET && state.autoCapture && !retaking) {
+            AssistChip(
+                onClick = onCaptureAnyway,
+                label = { Text(stringResource(R.string.action_capture_anyway)) },
+                leadingIcon = { Icon(Icons.Filled.CameraAlt, null) },
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         if (retaking) {

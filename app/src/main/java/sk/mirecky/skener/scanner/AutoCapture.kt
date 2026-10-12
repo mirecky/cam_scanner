@@ -46,8 +46,18 @@ data class AutoCaptureConfig(
     val lostMsForChange: Long = 300,
     /** Najkratší čas medzi dvoma automatickými snímkami. */
     val minIntervalMs: Long = 1_500,
-    /** Rozdiel odtlačkov, pod ktorým ide o ten istý list. */
-    val sameSheetDifference: Double = 0.10,
+    /**
+     * Rozdiel odtlačkov, pod ktorým ide o ten istý list, ak sa v zábere len pohlo
+     * (ruka, otras telefónu) – list zostal ležať na mieste.
+     */
+    val sameSheetDifference: Double = 0.06,
+    /**
+     * Prísnejšia hranica po tom, čo dokument zo záberu na chvíľu zmizol (list bol zdvihnutý):
+     * vtedy ide takmer isto o nový list, aj keď má rovnaké rozloženie (formuláre, výsledky vyšetrení).
+     */
+    val sameSheetDifferenceAfterLost: Double = 0.025,
+    /** Celkový posun od začiatku ustaľovania, ktorý ešte nie je „posúvanie záberu“ (násobok [maxCornerShift]). */
+    val maxDriftFactor: Double = 3.0,
 )
 
 /**
@@ -66,9 +76,12 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
 
     private var phase = CapturePhase.SEARCHING
     private var anchor: Quad? = null
+    private var previous: Quad? = null
     private var stableSince = 0L
     private var lastFingerprint: FloatArray? = null
     private var changeSeen = true
+    /** Zmena v zábere bola zmiznutie dokumentu (zdvihnutý list), nie iba pohyb. */
+    private var sheetLifted = false
     private var lostSince = -1L
     private var lastCaptureAt = Long.MIN_VALUE / 2
 
@@ -90,6 +103,8 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
         }
         val lostLongEnough = lostSince >= 0 && frame.timeMs - lostSince >= config.lostMsForChange
 
+        if (lostLongEnough) sheetLifted = true
+
         if (phase == CapturePhase.WAITING_FOR_CHANGE) {
             if (moving || lostLongEnough) changeSeen = true
             if (!changeSeen) return CaptureState(phase, sameAsLast = true) to false
@@ -99,11 +114,18 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
         if (quad == null) {
             phase = CapturePhase.SEARCHING
             anchor = null
+            previous = null
             return CaptureState(phase) to false
         }
 
+        // Ustálenie: bez náhlych skokov medzi snímkami a bez väčšieho posunu od začiatku
+        // (pomalé chvenie ruky ustálenie neruší, presúvanie záberu áno).
         val a = anchor
-        if (phase == CapturePhase.SEARCHING || a == null || moving || quad.maxCornerShift(a) > config.maxCornerShift) {
+        val p = previous
+        val jumped = p != null && quad.maxCornerShift(p) > config.maxCornerShift
+        val drifted = a != null && quad.maxCornerShift(a) > config.maxCornerShift * config.maxDriftFactor
+        previous = quad
+        if (phase == CapturePhase.SEARCHING || a == null || moving || jumped || drifted) {
             phase = CapturePhase.STABILIZING
             anchor = quad
             stableSince = frame.timeMs
@@ -119,8 +141,10 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
         // Ustálený a ostrý dokument. Je to nový list?
         val fp = frame.fingerprint
         val previous = lastFingerprint
-        val difference = if (previous != null && fp != null) difference(fp, previous) else null
-        if (difference != null && difference < config.sameSheetDifference) {
+        val last = lastFingerprint
+        val difference = if (last != null && fp != null) difference(fp, last) else null
+        val sameLimit = if (sheetLifted) config.sameSheetDifferenceAfterLost else config.sameSheetDifference
+        if (difference != null && difference < sameLimit) {
             phase = CapturePhase.WAITING_FOR_CHANGE
             changeSeen = false
             return CaptureState(phase, sameAsLast = true, difference = difference) to false
@@ -132,6 +156,7 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
 
         phase = CapturePhase.CAPTURING
         lastCaptureAt = frame.timeMs
+        sheetLifted = false
         return CaptureState(phase, progress = 1f, difference = difference) to true
     }
 
@@ -139,7 +164,9 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
     fun onCaptured(fingerprint: FloatArray?) {
         lastFingerprint = fingerprint
         changeSeen = false
+        sheetLifted = false
         anchor = null
+        previous = null
         phase = CapturePhase.WAITING_FOR_CHANGE
     }
 
@@ -153,15 +180,17 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
     fun reset() {
         lastFingerprint = null
         changeSeen = true
+        sheetLifted = false
         anchor = null
+        previous = null
         phase = CapturePhase.SEARCHING
     }
 
     companion object {
         /** Rozmery odtlačku (musia zodpovedať [ImageOps.fingerprint]). */
-        const val FP_W = 64
-        const val FP_H = 90
-        private const val MAX_SHIFT = 3
+        const val FP_W = 96
+        const val FP_H = 136
+        private const val MAX_SHIFT = 4
 
         /**
          * Rozdiel dvoch odtlačkov: 1 − najvyššia normalizovaná korelácia pri vzájomnom posune

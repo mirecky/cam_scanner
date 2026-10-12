@@ -11,6 +11,8 @@ class AutoCaptureControllerTest {
     private val n = AutoCaptureController.FP_W * AutoCaptureController.FP_H
     private val sheetA = FloatArray(n) { if ((it / 7) % 2 == 0) 1f else -1f }
     private val sheetB = FloatArray(n) { if ((it * 31 / 11) % 5 == 0) 1.4f else -0.7f }
+    /** List s rovnakým rozložením ako A (formulár), líši sa len málo. */
+    private val sheetA2 = FloatArray(n) { sheetA[it] + 0.35f * sheetB[it] }
 
     private var time = 0L
     private val controller = AutoCaptureController()
@@ -104,5 +106,28 @@ class AutoCaptureControllerTest {
         var i = 0
         // Krátke výpadky detekcie bez pohybu; list je stále ten istý.
         assertFalse(run(5000) { i++; frame(q = if (i % 15 < 2) null else quad, fp = sheetA) })
+    }
+
+    @Test fun similarSheetAfterLiftingIsCaptured() {
+        val d = AutoCaptureController.difference(sheetA, sheetA2)
+        assertTrue("rozdiel $d", d > 0.025 && d < 0.06)
+        assertTrue(run(1000) { frame(fp = sheetA) })
+        // Podobný list (rovnaký formulár) položený po zdvihnutí predchádzajúceho.
+        run(300) { frame(motion = 25.0) }
+        run(400) { frame(q = null) }
+        assertTrue(run(1500) { frame(fp = sheetA2) })
+    }
+
+    @Test fun similarSheetAfterMotionOnlyIsNotCaptured() {
+        assertTrue(run(1000) { frame(fp = sheetA) })
+        // Otras telefónu, list ostal ležať; odtlačok sa líši len šumom.
+        run(300) { frame(motion = 25.0) }
+        assertFalse(run(3000) { frame(fp = sheetA2) })
+    }
+
+    @Test fun slowHandDriftDoesNotPreventCapture() {
+        var i = 0
+        // Pomalé chvenie ruky: posun 0,005 za snímok, celkovo do 0,04.
+        assertTrue(run(2500) { i++; frame(q = quad.copy(tl = Pt(0.2 + minOf(i, 8) * 0.005, 0.15))) })
     }
 }

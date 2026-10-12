@@ -24,6 +24,8 @@ class AnalysisResult(
     val aspect: Double,
     /** Dôvod zamietnutia posledného kandidáta (diagnostika), ak dokument nebol nájdený. */
     val rejection: String?,
+    /** Dokument je v zábere, ale presahuje jeho okraj. */
+    val outOfFrame: Boolean = false,
 )
 
 /**
@@ -49,7 +51,7 @@ class DocumentAnalyzer(
             val fingerprint = detection?.let { ImageOps.fingerprint(gray, it.quad) }
             val aspect = gray.cols().toDouble() / gray.rows()
             gray.release()
-            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect, lastRejection))
+            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect, lastRejection, detector.outOfFrame))
         } finally {
             image.close()
         }

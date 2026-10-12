@@ -13,9 +13,12 @@
     <string name="status_searching">Looking for document</string>
     <string name="status_hold_still">Document found – hold still</string>
     <string name="status_ready_manual">Document found – press capture</string>
-    <string name="status_same_sheet">Captured – place next sheet</string>
+    <string name="status_same_sheet">This sheet is already captured – place the next one</string>
     <string name="status_saving">Capturing…</string>
     <string name="status_captured">Captured – place next sheet</string>
+    <string name="status_focusing">Document found – focusing, hold still</string>
+    <string name="status_out_of_frame">Sheet exceeds the frame – move back</string>
+    <string name="action_capture_anyway">Capture anyway</string>
     <string name="status_error">Capture failed</string>
 
     <string name="action_capture">Capture</string>

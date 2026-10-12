@@ -39,6 +39,10 @@ enum class ScanStatus {
     HOLD_STILL,
     /** Dokument nájdený, čaká sa na stlačenie spúšte (ručné snímanie). */
     READY_MANUAL,
+    /** Dokument je ustálený, ale obraz ešte nie je ostrý. */
+    FOCUSING,
+    /** Dokument presahuje okraj záberu. */
+    OUT_OF_FRAME,
     SAVING,
     CAPTURED,
     /** V zábere je list, ktorý už bol nasnímaný. */
@@ -65,6 +69,10 @@ data class OverlayState(
     /** Pomer šírky a výšky analyzovaného obrazu (zodpovedá náhľadu). */
     val aspect: Double = 3.0 / 4.0,
     val capture: CaptureState = CaptureState(CapturePhase.SEARCHING),
+    /** Nájdený dokument je dostatočne ostrý. */
+    val sharp: Boolean = false,
+    /** Dokument je v zábere, ale presahuje jeho okraj. */
+    val outOfFrame: Boolean = false,
     /** Diagnostické hodnoty na ladenie prahov. */
     val debug: String = "",
 )
@@ -122,7 +130,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 pageCount = (doc?.pages?.size ?: 0) + busy,
                 lastPage = doc?.pages?.lastOrNull(),
                 processing = busy,
-                status = transient ?: statusOf(overlay.capture, autoOn),
+                status = transient ?: statusOf(overlay, autoOn),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScannerUiState())
 
@@ -221,10 +229,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     fun onAnalysis(result: AnalysisResult) {
         latest = result
         val detection = result.detection
+        val sharp = detection != null && isSharp(detection)
         val observation = FrameObservation(
             timeMs = result.timeMs,
             quad = detection?.quad,
-            sharp = (detection?.sharpness ?: 0.0) >= MIN_SHARPNESS,
+            sharp = sharp,
             motion = result.motion,
             fingerprint = result.fingerprint,
         )
@@ -233,9 +242,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             quad = detection?.quad,
             aspect = result.aspect,
             capture = state,
+            sharp = sharp,
+            outOfFrame = detection == null && result.outOfFrame,
             debug = buildString {
                 if (detection != null) {
-                    append("kontrast %.0f · ostrosť %.0f · plocha %.2f".format(detection.contrast, detection.sharpness, detection.areaFraction))
+                    append("kontrast %.0f · ostrosť %.0f (pomer %.0f) · plocha %.2f".format(detection.contrast, detection.sharpness, detection.sharpRatio, detection.areaFraction))
                 } else {
                     append("nenájdený")
                     result.rejection?.let { append(" (").append(it).append(")") }
@@ -307,9 +318,21 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    private fun statusOf(capture: CaptureState, autoOn: Boolean): ScanStatus = when (capture.phase) {
-        CapturePhase.SEARCHING -> ScanStatus.SEARCHING
-        CapturePhase.STABILIZING -> if (autoOn) ScanStatus.HOLD_STILL else ScanStatus.READY_MANUAL
+    /**
+     * Ostrosť: pri husto popísanom liste stačí rozptyl Laplaceovho operátora; riedko popísaný list
+     * (formulár, výsledky vyšetrení) má rozptyl malý aj pri ostrom obraze, preto sa uznáva aj
+     * pomer k rozmazanému obrazu, ktorý od množstva textu nezávisí.
+     */
+    private fun isSharp(d: sk.mirecky.skener.scanner.Detection): Boolean =
+        d.sharpness >= MIN_SHARPNESS || (d.sharpRatio >= MIN_SHARP_RATIO && d.sharpness >= MIN_SHARPNESS_SPARSE)
+
+    private fun statusOf(overlay: OverlayState, autoOn: Boolean): ScanStatus = when (overlay.capture.phase) {
+        CapturePhase.SEARCHING -> if (overlay.outOfFrame) ScanStatus.OUT_OF_FRAME else ScanStatus.SEARCHING
+        CapturePhase.STABILIZING -> when {
+            !autoOn -> ScanStatus.READY_MANUAL
+            overlay.capture.progress >= 1f && !overlay.sharp -> ScanStatus.FOCUSING
+            else -> ScanStatus.HOLD_STILL
+        }
         CapturePhase.CAPTURING -> ScanStatus.SAVING
         CapturePhase.WAITING_FOR_CHANGE -> ScanStatus.SAME_SHEET
     }
@@ -329,6 +352,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         const val TAG = "ScannerViewModel"
         /** Minimálna ostrosť (rozptyl Laplaceovho operátora); ostré zábery na S25 Ultra majú 1500–2500. */
         const val MIN_SHARPNESS = 400.0
+        /** Pomer ostrosti (pozri [sk.mirecky.skener.scanner.Detection.sharpRatio]); ostré zábery ~100, rozmazané pod 10. */
+        const val MIN_SHARP_RATIO = 20.0
+        /** Najmenší rozptyl pri riedkom liste, aby sa za „ostrý“ nepovažoval šum na prázdnom zábere. */
+        const val MIN_SHARPNESS_SPARSE = 60.0
         const val RECENT_MS = 500L
     }
 }

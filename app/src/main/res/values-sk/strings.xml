@@ -13,9 +13,12 @@
     <string name="status_searching">Hľadám dokument</string>
     <string name="status_hold_still">Dokument nájdený – drž, snímam</string>
     <string name="status_ready_manual">Dokument nájdený – stlač spúšť</string>
-    <string name="status_same_sheet">Nasnímané – polož ďalší list</string>
+    <string name="status_same_sheet">Tento list už je nasnímaný – polož ďalší</string>
     <string name="status_saving">Snímam…</string>
     <string name="status_captured">Nasnímané – polož ďalší list</string>
+    <string name="status_focusing">Dokument nájdený – zaostrujem, drž pevne</string>
+    <string name="status_out_of_frame">List presahuje záber – oddiaľ telefón</string>
+    <string name="action_capture_anyway">Nasnímať aj tak</string>
     <string name="status_error">Snímanie zlyhalo</string>
 
     <string name="action_capture">Nasnímať</string>
