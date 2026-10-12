@@ -60,9 +60,10 @@ android {
         compose = true
     }
 
-    // Modely OCR sa čítajú cez file descriptor, preto nesmú byť v APK komprimované.
-    androidResources {
-        noCompress += "traineddata"
+    // Natívne knižnice (OpenCV, Tesseract) sa v APK komprimujú a pri inštalácii rozbalia:
+    // APK je o ~15 MB menšie, čo je podstatné pri doručovaní bez obchodu.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
     }
 }
 

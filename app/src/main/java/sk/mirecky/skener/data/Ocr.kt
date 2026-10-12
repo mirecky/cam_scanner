@@ -53,7 +53,7 @@ data class OcrResult(
 }
 
 /**
- * Offline OCR (Tesseract 5, modely tessdata_best pre slovenčinu a angličtinu).
+ * Offline OCR (Tesseract 5, modely tessdata_best; jazyky podľa modelov pribalených v APK).
  * Nie je vláknovo bezpečný – volať z jedného vlákna (pozri [DocumentRepository]).
  */
 internal class OcrEngine(private val context: Context) {
@@ -64,16 +64,26 @@ internal class OcrEngine(private val context: Context) {
         api?.let { return it }
         val root = File(context.filesDir, "ocr")
         val dataDir = File(root, "tessdata").apply { mkdirs() }
-        for (lang in LANGS) {
-            val target = File(dataDir, "$lang.traineddata")
-            val asset = "tessdata/$lang.traineddata"
-            val size = context.assets.openFd(asset).use { it.length }.takeIf { it > 0 }
-            if (!target.exists() || (size != null && target.length() != size)) {
-                context.assets.open(asset).use { input -> target.outputStream().use { input.copyTo(it) } }
+        // Jazyky = modely pribalené v APK (assets/tessdata); pridanie jazyka nevyžaduje zmenu kódu.
+        val langs = context.assets.list("tessdata").orEmpty()
+            .filter { it.endsWith(".traineddata") }
+            .map { it.removeSuffix(".traineddata") }
+            .sorted()
+        check(langs.isNotEmpty()) { "V APK chýbajú jazykové modely OCR" }
+        // Modely sa skopírujú z APK pri prvom spustení a znova po aktualizácii aplikácie.
+        val version = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toString()
+        val marker = File(dataDir, "version")
+        if (marker.takeIf { it.exists() }?.readText() != version || langs.any { !File(dataDir, "$it.traineddata").exists() }) {
+            for (lang in langs) {
+                val target = File(dataDir, "$lang.traineddata")
+                val tmp = File(dataDir, "$lang.tmp")
+                context.assets.open("tessdata/$lang.traineddata").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                check(tmp.renameTo(target)) { "Kopírovanie modelu $lang zlyhalo" }
             }
+            marker.writeText(version)
         }
         return TessBaseAPI().also {
-            check(it.init(root.path, LANGS.joinToString("+"), TessBaseAPI.OEM_LSTM_ONLY)) { "Tesseract sa nepodarilo inicializovať" }
+            check(it.init(root.path, langs.joinToString("+"), TessBaseAPI.OEM_LSTM_ONLY)) { "Tesseract sa nepodarilo inicializovať" }
             it.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
             api = it
         }
@@ -121,7 +131,6 @@ internal class OcrEngine(private val context: Context) {
 
     private companion object {
         const val TAG = "OcrEngine"
-        val LANGS = listOf("slk", "eng")
         const val MAX_WIDTH = 2480
     }
 }
