@@ -200,4 +200,20 @@
         <item quantity="many">Pripojené %1$d strany do „%2$s“</item>
         <item quantity="other">Pripojených %1$d strán do „%2$s“</item>
     </plurals>
+    <string name="folder_prompt_title">Zobraziť aj staršie PDF</string>
+    <string name="folder_prompt_text">PDF nasnímané pred preinštalovaním aplikácie ležia v priečinku Dokumenty/Skener. Android ich sprístupní až po jednorazovom povolení. V ďalšom okne ťukni na Použiť tento priečinok a Povoliť.</string>
+    <string name="folder_prompt_allow">Povoliť prístup</string>
+    <string name="folder_prompt_no">Nie, ďakujem</string>
+    <plurals name="folder_imported">
+        <item quantity="one">Načítané staršie PDF: %d</item>
+        <item quantity="few">Načítané staršie PDF: %d</item>
+        <item quantity="many">Načítané staršie PDF: %d</item>
+        <item quantity="other">Načítané staršie PDF: %d</item>
+    </plurals>
+    <plurals name="folder_loading">
+        <item quantity="one">Načítavam staršie PDF, zostáva %d…</item>
+        <item quantity="few">Načítavam staršie PDF, zostávajú %d…</item>
+        <item quantity="many">Načítavam staršie PDF, zostáva %d…</item>
+        <item quantity="other">Načítavam staršie PDF, zostáva %d…</item>
+    </plurals>
 </resources>

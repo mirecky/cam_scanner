@@ -21,6 +21,7 @@ internal object DocumentJson {
             .put("updatedAt", doc.updatedAt)
             .put("pdfUri", doc.pdfUri ?: JSONObject.NULL)
             .put("compact", doc.compact)
+            .put("pdfOriginal", doc.pdfOriginal)
             .put("pages", JSONArray(doc.pages.map { page ->
                 JSONObject()
                     .put("id", page.id)
@@ -71,6 +72,7 @@ internal object DocumentJson {
             pages = pages,
             pdfUri = json.optString("pdfUri").takeIf { it.isNotEmpty() && it != "null" },
             compact = json.optBoolean("compact", false),
+            pdfOriginal = json.optBoolean("pdfOriginal", false),
         )
     }.getOrNull()
 

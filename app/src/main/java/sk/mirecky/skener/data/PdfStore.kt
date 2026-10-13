@@ -4,7 +4,9 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Log
 import java.io.File
 
@@ -22,11 +24,11 @@ internal class PdfStore(private val context: Context) {
      */
     fun write(name: String, existing: Uri?, source: File): Uri {
         if (existing != null) {
-            val ok = runCatching {
+            val written = runCatching {
                 resolver.openOutputStream(existing, "wt")!!.use { out -> source.inputStream().use { it.copyTo(out) } }
                 rename(existing, name)
-            }.onFailure { Log.w(TAG, "Prepísanie PDF zlyhalo, vytváram nové", it) }.isSuccess
-            if (ok) return existing
+            }.onFailure { Log.w(TAG, "Prepísanie PDF zlyhalo, vytváram nové", it) }.getOrNull()
+            if (written != null) return written
         }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.pdf")
@@ -46,8 +48,51 @@ internal class PdfStore(private val context: Context) {
         return uri
     }
 
-    fun rename(uri: Uri, name: String) {
-        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.pdf") }, null, null)
+    /**
+     * Premenuje PDF. Súbor vytvorený touto inštaláciou je v MediaStore; staršie PDF sprístupnené
+     * cez povolený priečinok (pozri [listFolder]) sa premenúvajú cez DocumentsContract, pričom
+     * sa môže zmeniť ich URI. Vráti platné URI po premenovaní.
+     */
+    fun rename(uri: Uri, name: String): Uri {
+        if (isMedia(uri)) {
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.pdf") }, null, null)
+            return uri
+        }
+        if (displayName(uri) == "$name.pdf") return uri
+        return DocumentsContract.renameDocument(resolver, uri, "$name.pdf") ?: uri
+    }
+
+    private fun isMedia(uri: Uri) = uri.authority == MediaStore.AUTHORITY
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull()
+
+    /** PDF súbor v povolenom priečinku. */
+    class FolderPdf(val uri: Uri, val name: String, val modified: Long)
+
+    /** Zoznam PDF v priečinku, ku ktorému používateľ povolil prístup (strom SAF). */
+    fun listFolder(tree: Uri): List<FolderPdf> {
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val cols = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val out = ArrayList<FolderPdf>()
+        resolver.query(children, cols, null, null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val name = c.getString(1) ?: continue
+                val mime = c.getString(2)
+                if (name.startsWith(".")) continue
+                if (mime != MIME && !name.endsWith(".pdf", ignoreCase = true)) continue
+                out += FolderPdf(DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(0)), name, c.getLong(3))
+            }
+        }
+        return out
     }
 
     /** Veľkosť súboru v bajtoch, alebo null, ak súbor neexistuje. */
@@ -77,7 +122,7 @@ internal class PdfStore(private val context: Context) {
     }
 
     fun delete(uri: Uri) {
-        runCatching { resolver.delete(uri, null, null) }
+        runCatching { if (isMedia(uri)) resolver.delete(uri, null, null) else DocumentsContract.deleteDocument(resolver, uri) }
             .onFailure { Log.w(TAG, "Zmazanie PDF zlyhalo", it) }
     }
 

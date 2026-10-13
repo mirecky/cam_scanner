@@ -133,6 +133,83 @@ class DocumentRepository(private val context: Context) {
     /** Pôvodný (nenormalizovaný) text dokumentu na zobrazenie úryvku. */
     fun displayText(doc: DocumentItem): String = documentText(doc.id)
 
+    private val _folderSync = MutableStateFlow<Int?>(null)
+    /** Počet starších PDF, ktoré sa práve načítavajú z priečinka (null = nenačítava sa). */
+    val folderSync: StateFlow<Int?> = _folderSync.asStateFlow()
+    private val folderMutex = Mutex()
+
+    /**
+     * Načíta do knižnice staršie PDF z povoleného priečinka [tree], ktoré v knižnici ešte nie sú
+     * (napr. po preinštalovaní aplikácie). Strany sa vykreslia ako obrázky, text sa rozpozná znova.
+     * Pôvodné PDF sa neprepisuje, kým sa dokument neupraví. Vráti počet načítaných dokumentov.
+     */
+    suspend fun importFolder(tree: Uri): Int = folderMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val files = runCatching { pdfStore.listFolder(tree) }
+                .onFailure { Log.w(TAG, "Priečinok sa nedá prečítať", it) }
+                .getOrDefault(emptyList())
+            val known = _documents.value.map { it.name.lowercase() }.toSet()
+            val todo = files.filter { it.name.removeSuffix(".pdf").removeSuffix(".PDF").lowercase() !in known }
+            if (todo.isEmpty()) return@withContext 0
+            var done = 0
+            _folderSync.value = todo.size
+            try {
+                for (f in todo) {
+                    if (runCatching { importPdf(f) }.onFailure { Log.e(TAG, "Načítanie ${f.name} zlyhalo", it) }.getOrDefault(false)) done++
+                    _folderSync.value = (_folderSync.value ?: 1) - 1
+                }
+            } finally {
+                _folderSync.value = null
+            }
+            if (done > 0) scheduleOcr()
+            done
+        }
+    }
+
+    /** Vykreslí strany PDF do nového dokumentu napojeného na pôvodný súbor. */
+    private suspend fun importPdf(f: PdfStore.FolderPdf): Boolean {
+        val docId = newId()
+        val docDir = File(root, docId)
+        val pagesDir = File(docDir, "pages")
+        val pages = ArrayList<PageItem>()
+        val now = System.currentTimeMillis()
+        try {
+            context.contentResolver.openFileDescriptor(f.uri, "r")!!.use { pfd ->
+                android.graphics.pdf.PdfRenderer(pfd).use { renderer ->
+                    for (i in 0 until renderer.pageCount) {
+                        renderer.openPage(i).use { page ->
+                            val pageId = "${docId}_$i"
+                            val dir = File(pagesDir, pageId).apply { mkdirs() }
+                            val item = PageItem(pageId, dir, PageFilter.ORIGINAL, level = 0, mode = ScanMode.DOCUMENT, rotation = 0, quad = null, version = now)
+                            val filter = PageRenderer.renderPdfPage(page, item.cropFile)
+                            item.cropFile.copyTo(item.displayFile, overwrite = true)
+                            item.cropFile.copyTo(item.originalFile, overwrite = true)
+                            pages += item.copy(filter = filter)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            docDir.deleteRecursively()
+            throw e
+        }
+        if (pages.isEmpty()) {
+            docDir.deleteRecursively()
+            return false
+        }
+        val time = if (f.modified > 0) f.modified else now
+        val doc = DocumentItem(
+            docId, docDir, f.name.removeSuffix(".pdf").removeSuffix(".PDF"), time, time, pages,
+            pdfUri = f.uri.toString(), pdfOriginal = true,
+        )
+        mutex.withLock {
+            DocumentJson.write(doc)
+            _documents.update { list -> (list + doc).sortedByDescending { it.updatedAt } }
+        }
+        pdfStore.size(f.uri)?.let { size -> _pdfSizes.update { it + (docId to size) } }
+        return true
+    }
+
     /** Zapne alebo vypne zmenšené PDF (PDF sa hneď prepočíta). */
     suspend fun setCompact(docId: String, compact: Boolean) {
         if (document(docId)?.compact == compact) return
@@ -395,7 +472,8 @@ class DocumentRepository(private val context: Context) {
             } else {
                 return
             }
-            val next = change(current).copy(updatedAt = now)
+            // Akákoľvek úprava znamená, že PDF sa odteraz vytvára z aktuálnych strán.
+            val next = change(current).copy(updatedAt = now, pdfOriginal = false)
             withContext(Dispatchers.IO) {
                 next.dir.mkdirs()
                 DocumentJson.write(next)
@@ -419,7 +497,7 @@ class DocumentRepository(private val context: Context) {
 
     private suspend fun exportPdf(docId: String) {
         val doc = document(docId) ?: return
-        if (doc.pages.isEmpty()) return
+        if (doc.pages.isEmpty() || doc.pdfOriginal) return
         _exporting.update { it + docId }
         try {
             val tmp = File(context.cacheDir, "$docId.pdf")

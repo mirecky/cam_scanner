@@ -48,4 +48,9 @@ data class DocumentItem(
     val pdfUri: String?,
     /** Zmenšené PDF (nižšie rozlíšenie a vyššia kompresia obrázkov). */
     val compact: Boolean = false,
+    /**
+     * Dokument načítaný zo staršieho PDF, ktorý ešte nebol upravený: PDF sa neprepisuje,
+     * kým používateľ dokument nezmení (pôvodný súbor ostane bit po bite zachovaný).
+     */
+    val pdfOriginal: Boolean = false,
 )

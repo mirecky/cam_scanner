@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
@@ -166,6 +167,38 @@ fun LibraryScreen(onBack: () -> Unit, onOpenDocument: (String) -> Unit, onScan: 
     }
     LaunchedEffect(openAfterImport) { openAfterImport?.let { openAfterImport = null; onOpenDocument(it) } }
 
+    // Staršie PDF z priečinka Dokumenty/Skener (napr. spred preinštalovania aplikácie):
+    // Android ich sprístupní až po jednorazovom povolení priečinka.
+    val folder by settings.pdfFolder.collectAsStateWithLifecycle(null)
+    val promptDismissed by settings.folderPromptDismissed.collectAsStateWithLifecycle(true)
+    val folderSync by repository.folderSync.collectAsStateWithLifecycle()
+    val folderGranted = folder?.let { f -> context.contentResolver.persistedUriPermissions.any { it.uri.toString() == f && it.isReadPermission } } == true
+    fun syncFolder(uri: android.net.Uri, announce: Boolean) {
+        app.scope.launch {
+            val n = repository.importFolder(uri)
+            if (n > 0 || announce) {
+                app.snackbar.showSnackbar(context.resources.getQuantityString(R.plurals.folder_imported, n, n))
+            }
+        }
+    }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        scope.launch { settings.setPdfFolder(uri.toString()) }
+        syncFolder(uri, announce = true)
+    }
+    // Pri každom otvorení knižnice sa doplnia PDF, ktoré v priečinku pribudli mimo aplikácie.
+    LaunchedEffect(folder, folderGranted) {
+        val f = folder
+        if (f != null && folderGranted) syncFolder(android.net.Uri.parse(f), announce = false)
+    }
+    val showFolderPrompt = !folderGranted && !promptDismissed
+
     // Vyhľadávanie beží mimo hlavného vlákna; text strán sa číta z výsledkov OCR.
     val entries by produceState(initialValue = documents.map { LibraryEntry(it, null) }, documents, query, ocrRevision) {
         value = withContext(Dispatchers.Default) { search(repository, documents, query) }
@@ -265,6 +298,24 @@ fun LibraryScreen(onBack: () -> Unit, onOpenDocument: (String) -> Unit, onScan: 
                         modifier = Modifier.weight(1f),
                     )
                     SortButton(sort, onSelect = { s -> scope.launch { settings.setLibrarySort(s) } })
+                }
+            }
+            if (showFolderPrompt && !selecting) {
+                FolderPrompt(
+                    onAllow = { pickFolder.launch(skenerFolderUri()) },
+                    onDismiss = { scope.launch { settings.dismissFolderPrompt() } },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                )
+            }
+            folderSync?.let { left ->
+                Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)) {
+                    Text(
+                        pluralStringResource(R.plurals.folder_loading, left, left),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = SkenerColors.Accent,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = SkenerColors.Accent, trackColor = SkenerColors.Raise)
                 }
             }
             if (importing > 0) {
@@ -407,6 +458,37 @@ fun LibraryScreen(onBack: () -> Unit, onOpenDocument: (String) -> Unit, onScan: 
             },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
+    }
+}
+
+/** Počiatočné umiestnenie výberu priečinka: Dokumenty/Skener na vnútornom úložisku. */
+private fun skenerFolderUri(): android.net.Uri =
+    android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents/Skener")
+
+/** Ponuka sprístupniť staršie PDF z priečinka Dokumenty/Skener. */
+@Composable
+private fun FolderPrompt(onAllow: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(SkenerColors.Raise)
+            .border(1.dp, SkenerColors.Accent.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Outlined.FolderOpen, null, tint = SkenerColors.Accent)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.folder_prompt_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.folder_prompt_text), style = MaterialTheme.typography.bodySmall, color = SkenerColors.Muted)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.folder_prompt_no), color = SkenerColors.Muted) }
+            TextButton(onClick = onAllow) { Text(stringResource(R.string.folder_prompt_allow), fontWeight = FontWeight.SemiBold) }
+        }
     }
 }
 

@@ -182,4 +182,16 @@
         <item quantity="one">%1$d page appended to “%2$s”</item>
         <item quantity="other">%1$d pages appended to “%2$s”</item>
     </plurals>
+    <string name="folder_prompt_title">Show older PDFs too</string>
+    <string name="folder_prompt_text">PDFs scanned before the app was reinstalled are in Documents/Skener. Android shows them only after a one-time permission. In the next screen tap Use this folder and Allow.</string>
+    <string name="folder_prompt_allow">Allow access</string>
+    <string name="folder_prompt_no">No, thanks</string>
+    <plurals name="folder_imported">
+        <item quantity="one">Older PDFs loaded: %d</item>
+        <item quantity="other">Older PDFs loaded: %d</item>
+    </plurals>
+    <plurals name="folder_loading">
+        <item quantity="one">Loading older PDFs, %d left…</item>
+        <item quantity="other">Loading older PDFs, %d left…</item>
+    </plurals>
 </resources>

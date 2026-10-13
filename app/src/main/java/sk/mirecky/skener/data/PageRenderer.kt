@@ -22,6 +22,8 @@ internal object PageRenderer {
     private const val JPEG_QUALITY = 92
     /** Kratšia strana obrazu pri hľadaní dokumentu (zodpovedá analýze z kamery). */
     private const val ANALYSIS_WIDTH = 480
+    /** Šírka vykreslenej strany staršieho PDF (300 dpi pre A4). */
+    private const val MAX_PDF_WIDTH = 2480
 
     /**
      * Z pôvodnej fotografie vytvorí farebný orez a výslednú stranu s filtrom a úpravami.
@@ -87,6 +89,52 @@ internal object PageRenderer {
         } finally {
             detector.release()
             gray.release()
+        }
+    }
+
+    /**
+     * Vykreslí stranu PDF (300 dpi, najviac šírka A4) do JPEG [target] a odhadne, aký filter
+     * strana má: čiernobiela (takmer len čierne a biele pixely), odtiene šedej alebo farebná.
+     */
+    fun renderPdfPage(page: android.graphics.pdf.PdfRenderer.Page, target: File): PageFilter {
+        val w = (page.width * 300 / 72).coerceIn(1, MAX_PDF_WIDTH)
+        val h = (w.toLong() * page.height / page.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+        val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(android.graphics.Color.WHITE)
+        page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+        val rgba = Mat()
+        Utils.bitmapToMat(bitmap, rgba)
+        bitmap.recycle()
+        val bgr = Mat()
+        Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
+        rgba.release()
+        val filter = classify(bgr)
+        write(bgr, target)
+        bgr.release()
+        return filter
+    }
+
+    private fun classify(bgr: Mat): PageFilter {
+        val small = Mat()
+        Imgproc.resize(bgr, small, org.opencv.core.Size(bgr.cols() / 4.0, bgr.rows() / 4.0), 0.0, 0.0, Imgproc.INTER_AREA)
+        val hsv = Mat()
+        Imgproc.cvtColor(small, hsv, Imgproc.COLOR_BGR2HSV)
+        val sat = Mat()
+        Core.extractChannel(hsv, sat, 1)
+        val colored = Mat()
+        Imgproc.threshold(sat, colored, 40.0, 255.0, Imgproc.THRESH_BINARY)
+        val colorShare = Core.countNonZero(colored).toDouble() / colored.total()
+        // Pri zmenšení vzniknú na hranách písmen sivé prechody, preto sa meria na plnom rozlíšení.
+        val gray = Mat()
+        Imgproc.cvtColor(bgr, gray, Imgproc.COLOR_BGR2GRAY)
+        val mid = Mat()
+        Core.inRange(gray, org.opencv.core.Scalar(40.0), org.opencv.core.Scalar(215.0), mid)
+        val midShare = Core.countNonZero(mid).toDouble() / mid.total()
+        listOf(small, hsv, sat, colored, gray, mid).forEach { it.release() }
+        return when {
+            colorShare > 0.01 -> PageFilter.ORIGINAL
+            midShare < 0.01 -> PageFilter.BLACK_WHITE
+            else -> PageFilter.GRAYSCALE
         }
     }
 

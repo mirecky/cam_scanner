@@ -41,6 +41,20 @@ class SettingsRepository(private val context: Context) {
             prefs[KEY_SORT]?.let { name -> LibrarySort.entries.firstOrNull { it.name == name } } ?: LibrarySort.NEWEST
         }
 
+    /** Priečinok so staršími PDF (strom SAF), ku ktorému používateľ povolil prístup. */
+    val pdfFolder: Flow<String?> = context.dataStore.data.map { it[KEY_FOLDER] }
+
+    /** Používateľ odmietol ponuku načítať staršie PDF. */
+    val folderPromptDismissed: Flow<Boolean> = context.dataStore.data.map { it[KEY_FOLDER_DISMISSED] ?: false }
+
+    suspend fun setPdfFolder(uri: String) {
+        context.dataStore.edit { it[KEY_FOLDER] = uri }
+    }
+
+    suspend fun dismissFolderPrompt() {
+        context.dataStore.edit { it[KEY_FOLDER_DISMISSED] = true }
+    }
+
     suspend fun setLibrarySort(sort: LibrarySort) {
         context.dataStore.edit { it[KEY_SORT] = sort.name }
     }
@@ -62,5 +76,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_SCAN_MODE = stringPreferencesKey("scan_mode")
         val KEY_SIGNAL = stringPreferencesKey("capture_signal")
         val KEY_SORT = stringPreferencesKey("library_sort")
+        val KEY_FOLDER = stringPreferencesKey("pdf_folder")
+        val KEY_FOLDER_DISMISSED = booleanPreferencesKey("pdf_folder_dismissed")
     }
 }
