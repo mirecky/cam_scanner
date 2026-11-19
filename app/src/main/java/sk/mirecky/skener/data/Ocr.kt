@@ -139,6 +139,11 @@ internal class OcrEngine(private val context: Context) {
         val bgr = Imgcodecs.imread(crop.path, Imgcodecs.IMREAD_COLOR)
         val gray = Filters.ocrInput(bgr)
         bgr.release()
+        // Vyčistené miesta (poznámky, škvrny) sa do textu nezapočítajú.
+        PageRenderer.loadMask(File(crop.parentFile, PageRenderer.CLEAN_FILE))?.let { mask ->
+            PageRenderer.applyClean(gray, mask, sk.mirecky.skener.scanner.PageFilter.GRAYSCALE)
+            mask.release()
+        }
         val input = limitWidth(gray)
         val w = input.cols()
         val h = input.rows()

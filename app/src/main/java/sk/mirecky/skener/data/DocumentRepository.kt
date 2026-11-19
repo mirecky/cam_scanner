@@ -368,7 +368,12 @@ class DocumentRepository(private val context: Context) {
     suspend fun rotate(docId: String, pageIds: Set<String>) {
         val doc = document(docId) ?: return
         val targets = doc.pages.filter { it.id in pageIds }
-        withContext(Dispatchers.Default) { targets.forEach { PageRenderer.rotateClockwise(it.cropFile, it.displayFile) } }
+        withContext(Dispatchers.Default) {
+            targets.forEach { p ->
+                val files = listOfNotNull(p.cropFile, p.displayFile, p.cleanFile.takeIf { it.exists() })
+                PageRenderer.rotateClockwise(*files.toTypedArray())
+            }
+        }
         val now = System.currentTimeMillis()
         modify(docId) { d ->
             d.copy(pages = d.pages.map { p -> if (p.id in pageIds) p.copy(rotation = (p.rotation + 90) % 360, version = now, cropVersion = now) else p })
@@ -399,6 +404,34 @@ class DocumentRepository(private val context: Context) {
         modify(docId) { d ->
             d.copy(pages = d.pages.map { p -> if (p.id in changed) p.copy(adjust = adjust, version = now) else p })
         }
+    }
+
+    /**
+     * Nástroj Vyčistiť: dokreslí ťahy štetca do masky strany a stranu prepočíta. Ťahy sú v pomerných
+     * súradniciach strany (0–1), [radius] je polomer štetca ako podiel šírky. Text sa rozpozná znova,
+     * aby vyčistené poznámky neostali v texte ani vo vyhľadávaní.
+     */
+    suspend fun clean(docId: String, pageId: String, strokes: List<List<Pair<Double, Double>>>, radius: Double) {
+        val page = document(docId)?.pages?.firstOrNull { it.id == pageId } ?: return
+        if (strokes.isEmpty()) return
+        withContext(Dispatchers.Default) {
+            PageRenderer.paintMask(page.cropFile, page.cleanFile, strokes, radius)
+            PageRenderer.applyFilter(page.cropFile, page.displayFile, page.filter, page.level, page.adjust)
+        }
+        val now = System.currentTimeMillis()
+        modify(docId) { d -> d.copy(pages = d.pages.map { p -> if (p.id == pageId) p.copy(version = now, cropVersion = now) else p }) }
+    }
+
+    /** Zruší všetky vyčistenia strany (vráti pôvodný obsah). */
+    suspend fun clearClean(docId: String, pageId: String) {
+        val page = document(docId)?.pages?.firstOrNull { it.id == pageId } ?: return
+        if (!page.cleanFile.exists()) return
+        withContext(Dispatchers.Default) {
+            page.cleanFile.delete()
+            PageRenderer.applyFilter(page.cropFile, page.displayFile, page.filter, page.level, page.adjust)
+        }
+        val now = System.currentTimeMillis()
+        modify(docId) { d -> d.copy(pages = d.pages.map { p -> if (p.id == pageId) p.copy(version = now, cropVersion = now) else p }) }
     }
 
     /** Nový orez strany z pôvodnej fotografie podľa [quad] (null = celá fotografia). */

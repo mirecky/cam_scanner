@@ -178,7 +178,7 @@ fun CropEditor(page: PageItem, onCancel: () -> Unit, onApply: (Quad?) -> Unit) {
 }
 
 /** Obdĺžnik, do ktorého sa obrázok zmestí (zachovaný pomer strán). */
-private fun imageRect(w: Float, h: Float, bmp: ImageBitmap): Rect {
+internal fun imageRect(w: Float, h: Float, bmp: ImageBitmap): Rect {
     val scale = minOf(w / bmp.width, h / bmp.height)
     val iw = bmp.width * scale
     val ih = bmp.height * scale

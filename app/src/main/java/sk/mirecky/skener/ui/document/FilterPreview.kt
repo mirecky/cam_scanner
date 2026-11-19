@@ -24,6 +24,7 @@ import kotlin.math.max
 class FilterPreview(private val page: PageItem) {
 
     private val base = CompletableDeferred<Mat>()
+    @Volatile private var mask: Mat? = null
     @Volatile private var loaded: Mat? = null
     @Volatile private var released = false
 
@@ -32,11 +33,13 @@ class FilterPreview(private val page: PageItem) {
         val src = Imgcodecs.imread(page.cropFile.path, Imgcodecs.IMREAD_COLOR)
         val mat = scaled(src, PREVIEW_SIZE).also { if (it !== src) src.release() }
         loaded = mat
+        mask = sk.mirecky.skener.data.PageRenderer.loadMask(page.cleanFile)
         base.complete(mat)
     }
 
     suspend fun render(filter: PageFilter, level: Int, adjust: Adjust): ImageBitmap = withContext(Dispatchers.Default) {
         val out = Filters.render(base.await(), filter, level, adjust)
+        mask?.let { sk.mirecky.skener.data.PageRenderer.applyClean(out, it, filter) }
         toImageBitmap(out).also { out.release() }
     }
 
@@ -45,6 +48,7 @@ class FilterPreview(private val page: PageItem) {
         val small = scaled(base.await(), THUMB_SIZE)
         PageFilter.entries.associateWith { f ->
             val out = Filters.apply(small, f, 0)
+            mask?.let { sk.mirecky.skener.data.PageRenderer.applyClean(out, it, f) }
             toImageBitmap(out).also { out.release() }
         }.also { if (small !== base.await()) small.release() }
     }
@@ -52,6 +56,7 @@ class FilterPreview(private val page: PageItem) {
     fun release() {
         if (released) return
         released = true
+        mask?.release()
         loaded?.release() ?: base.cancel()
     }
 

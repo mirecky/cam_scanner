@@ -34,6 +34,8 @@ data class PageItem(
     val cacheKey: String get() = "${dir.path}:$version"
     /** Výsledok OCR (pozri [OcrResult]). */
     val ocrFile: File get() = File(dir, "ocr.json")
+    /** Maska vyčistených miest (nástroj Vyčistiť) v rozlíšení orezu; 255 = vyčistiť. */
+    val cleanFile: File get() = File(dir, "clean.png")
 }
 
 /** Dokument = jedno PDF zložené zo strán. */

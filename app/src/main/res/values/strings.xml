@@ -194,4 +194,10 @@
         <item quantity="one">Loading older PDFs, %d left…</item>
         <item quantity="other">Loading older PDFs, %d left…</item>
     </plurals>
+    <string name="clean_hint">Rub out stains, fingers or notes with your finger. Tap to remove a dot.</string>
+    <string name="brush_label">Brush</string>
+    <string name="brush_small">Small</string>
+    <string name="brush_medium">Medium</string>
+    <string name="brush_large">Large</string>
+    <string name="action_undo_stroke">Undo last stroke</string>
 </resources>

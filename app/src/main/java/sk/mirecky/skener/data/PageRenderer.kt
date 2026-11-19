@@ -20,6 +20,10 @@ import java.io.File
 internal object PageRenderer {
 
     private const val JPEG_QUALITY = 92
+    /** Názov súboru masky vyčistených miest v priečinku strany. */
+    const val CLEAN_FILE = "clean.png"
+    /** Šírka obrazu pri dopočítaní vyčistených miest originálu. */
+    private const val INPAINT_WIDTH = 1200.0
     /** Kratšia strana obrazu pri hľadaní dokumentu (zodpovedá analýze z kamery). */
     private const val ANALYSIS_WIDTH = 480
     /** Šírka vykreslenej strany staršieho PDF (300 dpi pre A4). */
@@ -51,6 +55,8 @@ internal object PageRenderer {
         Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
         rgba.release()
 
+        // Nový orez: staré vyčistené miesta by už nesedeli.
+        File(display.parentFile, CLEAN_FILE).delete()
         val cropped = if (quad != null) {
             val snap = if (mode == ScanMode.DOCUMENT) ImageOps.A4_RATIO else null
             val margin = if (mode == ScanMode.DOCUMENT) DOCUMENT_MARGIN else WHITEBOARD_MARGIN
@@ -169,12 +175,73 @@ internal object PageRenderer {
 
     private fun renderFilter(crop: Mat, filter: PageFilter, display: File, level: Int = 0, adjust: Adjust = Adjust.NONE) {
         val out = Filters.render(crop, filter, level, adjust)
+        loadMask(File(display.parentFile, CLEAN_FILE))?.let { mask ->
+            applyClean(out, mask, filter)
+            mask.release()
+        }
         write(out, display)
         out.release()
     }
 
+    /** Načíta masku vyčistených miest, ak existuje. */
+    fun loadMask(file: File): Mat? {
+        if (!file.exists()) return null
+        val m = Imgcodecs.imread(file.path, Imgcodecs.IMREAD_GRAYSCALE)
+        return if (m.empty()) { m.release(); null } else m
+    }
+
+    /**
+     * Vyčistí miesta podľa [mask] (prispôsobí sa veľkosti obrazu): pri filtroch s vybieleným
+     * papierom ich vyplní bielou, pri origináli ich dopočíta z okolia (inpainting).
+     */
+    fun applyClean(image: Mat, mask: Mat, filter: PageFilter) {
+        val m = if (mask.size() == image.size()) mask else Mat().also {
+            Imgproc.resize(mask, it, image.size(), 0.0, 0.0, Imgproc.INTER_NEAREST)
+        }
+        if (filter == PageFilter.ORIGINAL) {
+            // Inpainting na zmenšenom obraze je rýchly; výsledok sa vloží len do vyčistených miest.
+            val scale = minOf(1.0, INPAINT_WIDTH / image.cols())
+            val small = Mat()
+            val smallMask = Mat()
+            Imgproc.resize(image, small, org.opencv.core.Size(), scale, scale, Imgproc.INTER_AREA)
+            Imgproc.resize(m, smallMask, small.size(), 0.0, 0.0, Imgproc.INTER_NEAREST)
+            val filled = Mat()
+            org.opencv.photo.Photo.inpaint(small, smallMask, filled, 7.0, org.opencv.photo.Photo.INPAINT_TELEA)
+            val big = Mat()
+            Imgproc.resize(filled, big, image.size(), 0.0, 0.0, Imgproc.INTER_LINEAR)
+            big.copyTo(image, m)
+            listOf(small, smallMask, filled, big).forEach { it.release() }
+        } else {
+            image.setTo(org.opencv.core.Scalar.all(255.0), m)
+        }
+        if (m !== mask) m.release()
+    }
+
+    /**
+     * Dokreslí ťahy štetca do masky vyčistených miest strany. Súradnice ťahov sú pomerné (0–1)
+     * k orezu strany, [radius] je polomer štetca ako podiel šírky strany.
+     */
+    fun paintMask(crop: File, maskFile: File, strokes: List<List<Pair<Double, Double>>>, radius: Double) {
+        val ref = Imgcodecs.imread(crop.path, Imgcodecs.IMREAD_GRAYSCALE)
+        val w = ref.cols()
+        val h = ref.rows()
+        ref.release()
+        val mask = loadMask(maskFile)?.takeIf { it.cols() == w && it.rows() == h } ?: Mat.zeros(h, w, org.opencv.core.CvType.CV_8UC1)
+        val thickness = (radius * 2 * w).toInt().coerceAtLeast(2)
+        val white = org.opencv.core.Scalar(255.0)
+        for (stroke in strokes) {
+            val pts = stroke.map { (x, y) -> org.opencv.core.Point(x * w, y * h) }
+            if (pts.size == 1) Imgproc.circle(mask, pts[0], thickness / 2, white, -1)
+            for (i in 1 until pts.size) Imgproc.line(mask, pts[i - 1], pts[i], white, thickness)
+            pts.forEach { Imgproc.circle(mask, it, thickness / 2, white, -1) }
+        }
+        write(mask, maskFile)
+        mask.release()
+    }
+
     private fun write(mat: Mat, target: File) {
-        val tmp = File(target.parentFile, target.name + ".tmp.jpg")
+        // Prípona dočasného súboru určuje formát (maska je bezstratové PNG, strany JPEG).
+        val tmp = File(target.parentFile, target.name + ".tmp." + target.extension)
         val params = MatOfInt(Imgcodecs.IMWRITE_JPEG_QUALITY, JPEG_QUALITY)
         val ok = Imgcodecs.imwrite(tmp.path, mat, params)
         params.release()

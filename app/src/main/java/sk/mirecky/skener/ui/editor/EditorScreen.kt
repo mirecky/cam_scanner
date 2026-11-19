@@ -112,7 +112,7 @@ import sk.mirecky.skener.ui.document.FilterPreview
 import sk.mirecky.skener.ui.theme.SkenerColors
 
 /** Nástroje editora strany. Orez, filtre a úpravy majú vlastný panel; ostatné sú okamžité akcie. */
-private enum class Tool { CROP, FILTER, ADJUST }
+private enum class Tool { CROP, FILTER, ADJUST, CLEAN }
 
 /** Rozpracovaná úprava aktuálnej strany (zobrazuje sa na náhľade, kým sa neuloží). */
 private data class Edit(val filter: PageFilter, val level: Int, val adjust: Adjust)
@@ -219,7 +219,17 @@ fun EditorScreen(
 
         // ---------- strana ----------
         Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF0B0D10))) {
-            if (tool == Tool.CROP) {
+            if (tool == Tool.CLEAN) {
+                CleanEditor(
+                    page = page,
+                    onCancel = { tool = null },
+                    onApply = { strokes, radius ->
+                        tool = null
+                        app.scope.launch { repository.clean(docId, page.id, strokes, radius) }
+                    },
+                    onReset = { app.scope.launch { repository.clearClean(docId, page.id) } },
+                )
+            } else if (tool == Tool.CROP) {
                 CropEditor(
                     page = page,
                     onCancel = { tool = null },
@@ -305,11 +315,11 @@ fun EditorScreen(
                 },
                 onDone = { tool = null },
             )
-            Tool.CROP -> Unit
+            Tool.CROP, Tool.CLEAN -> Unit
         }
 
         // ---------- nástroje ----------
-        if (tool != Tool.CROP) {
+        if (tool != Tool.CROP && tool != Tool.CLEAN) {
             Row(
                 Modifier.fillMaxWidth().background(SkenerColors.Panel).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
             ) {
@@ -324,9 +334,7 @@ fun EditorScreen(
                 ToolButton(Icons.Outlined.Tune, R.string.tool_adjust, active = tool == Tool.ADJUST) {
                     tool = if (tool == Tool.ADJUST) null else Tool.ADJUST
                 }
-                ToolButton(Icons.Outlined.CleaningServices, R.string.tool_clean, upcoming = true) {
-                    Toast.makeText(context, R.string.tool_upcoming, Toast.LENGTH_SHORT).show()
-                }
+                ToolButton(Icons.Outlined.CleaningServices, R.string.tool_clean, active = tool == Tool.CLEAN) { tool = Tool.CLEAN }
                 ToolButton(Icons.Outlined.TextFields, R.string.tool_text, active = showText, badge = page.id in ocrPending) { showText = true }
                 ToolButton(Icons.Outlined.Delete, R.string.action_delete) {
                     if (pages.size == 1) {

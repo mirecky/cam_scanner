@@ -216,4 +216,10 @@
         <item quantity="many">Načítavam staršie PDF, zostáva %d…</item>
         <item quantity="other">Načítavam staršie PDF, zostáva %d…</item>
     </plurals>
+    <string name="clean_hint">Pretri prstom škvrny, prsty alebo poznámky. Ťuknutím vyčistíš bodku.</string>
+    <string name="brush_label">Štetec</string>
+    <string name="brush_small">Malý</string>
+    <string name="brush_medium">Stredný</string>
+    <string name="brush_large">Veľký</string>
+    <string name="action_undo_stroke">Vrátiť posledný ťah</string>
 </resources>
