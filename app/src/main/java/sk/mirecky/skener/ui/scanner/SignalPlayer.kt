@@ -10,8 +10,9 @@ import sk.mirecky.skener.R
 import sk.mirecky.skener.data.CaptureSignal
 
 /**
- * Jemný signál po nasnímaní strany: krátky tichý tón, alebo extrémne krátka a slabá vibrácia.
- * Zvuk sa neprehrá, ak je telefón v tichom alebo vibračnom režime.
+ * Jemný signál po nasnímaní strany („môžeš vymeniť list“): mäkký dvojtón, alebo extrémne krátka
+ * a slabá vibrácia. Tón ide cez hlasitosť médií (ovláda sa bočnými tlačidlami, kým je aplikácia
+ * otvorená). Ak je telefón v tichom/vibračnom režime alebo sú médiá stlmené, zavibruje namiesto tónu.
  */
 class SignalPlayer(context: Context) {
 
@@ -21,7 +22,7 @@ class SignalPlayer(context: Context) {
         .setMaxStreams(1)
         .setAudioAttributes(
             AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build(),
         )
@@ -31,7 +32,11 @@ class SignalPlayer(context: Context) {
     fun play(signal: CaptureSignal) {
         when (signal) {
             CaptureSignal.SOUND ->
-                if (audio.ringerMode == AudioManager.RINGER_MODE_NORMAL) pool.play(chime, 0.6f, 0.6f, 1, 0, 1f)
+                if (audio.ringerMode == AudioManager.RINGER_MODE_NORMAL && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0) {
+                    pool.play(chime, 1f, 1f, 1, 0, 1f)
+                } else {
+                    vibrateTick()
+                }
             CaptureSignal.VIBRATION -> vibrateTick()
             CaptureSignal.SILENT -> Unit
         }

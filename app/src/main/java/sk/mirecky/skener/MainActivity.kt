@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Bočné tlačidlá ovládajú hlasitosť médií, cez ktorú ide tón po nasnímaní.
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         setContent {
             SkenerTheme {
                 var stack by rememberSaveable { mutableStateOf(listOf<String>()) }
