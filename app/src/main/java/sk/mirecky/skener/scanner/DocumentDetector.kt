@@ -52,7 +52,8 @@ data class DetectionCriteria(
     companion object {
         fun forMode(mode: ScanMode) = when (mode) {
             ScanMode.DOCUMENT -> DetectionCriteria(
-                minArea = 0.15, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.75, portraitOnly = true,
+                // 4 % záberu: list A6 snímaný z 25–30 cm (bližšie hlavný fotoaparát nezaostrí).
+                minArea = 0.04, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.75, portraitOnly = true,
                 minAngle = 50.0, maxAngle = 130.0,
                 minSideContrast = 12.0, insideBrighter = true, preferA4 = true,
                 minInsideBrightness = 115.0,
@@ -110,11 +111,12 @@ class DocumentDetector {
         Imgproc.dilate(edges, edges, kernel3)
 
         val candidates = ArrayList<MatOfPoint>()
-        candidates += contours(edges)
+        val minContour = criteria.minArea * 0.75
+        candidates += contours(edges, minContour)
         if (useOtsu) {
             Imgproc.threshold(blurred, binary, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
             Imgproc.morphologyEx(binary, binary, Imgproc.MORPH_CLOSE, kernel5)
-            candidates += contours(binary)
+            candidates += contours(binary, minContour)
         }
 
         var best: Detection? = null
@@ -138,12 +140,12 @@ class DocumentDetector {
         return best
     }
 
-    private fun contours(src: Mat): List<MatOfPoint> {
+    private fun contours(src: Mat, minFraction: Double): List<MatOfPoint> {
         val list = ArrayList<MatOfPoint>()
         val hierarchy = Mat()
         Imgproc.findContours(src, list, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
         hierarchy.release()
-        val minArea = src.rows() * src.cols() * 0.10
+        val minArea = src.rows() * src.cols() * minFraction
         val (keep, drop) = list.partition { Imgproc.contourArea(it) >= minArea }
         drop.forEach { it.release() }
         return keep
