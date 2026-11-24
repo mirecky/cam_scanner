@@ -21,3 +21,14 @@ fun sharePdf(context: Context, doc: DocumentItem) {
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     context.startActivity(Intent.createChooser(send, doc.name))
 }
+
+/** Zdieľanie dočasného PDF (napr. len vybraných strán) cez systémový dialóg. */
+fun sharePdfFile(context: Context, file: java.io.File, title: String) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".share", file)
+    val send = Intent(Intent.ACTION_SEND)
+        .setType("application/pdf")
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .putExtra(Intent.EXTRA_TITLE, title)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(send, title))
+}

@@ -222,4 +222,5 @@
     <string name="brush_medium">Stredný</string>
     <string name="brush_large">Veľký</string>
     <string name="action_undo_stroke">Vrátiť posledný ťah</string>
+    <string name="action_share_selected">Zdieľať vybrané strany</string>
 </resources>

@@ -133,7 +133,7 @@ class DocumentDetector {
         var best: Detection? = null
         var bestScore = 0.0
         for (contour in candidates) {
-            val quad = toQuad(contour, w, h, criteria) ?: continue
+          for (quad in toQuads(contour, w, h, criteria)) {
             val detection = evaluate(quad, gray, w, h, criteria) ?: continue
             // Pri dokumente majú prednosť tvary s pomerom strán blízkym A4.
             val ratioPenalty = if (criteria.preferA4) {
@@ -146,6 +146,7 @@ class DocumentDetector {
                 bestScore = score
                 best = detection
             }
+          }
         }
         candidates.forEach { it.release() }
         return best
@@ -160,6 +161,60 @@ class DocumentDetector {
         val (keep, drop) = list.partition { Imgproc.contourArea(it) >= minArea }
         drop.forEach { it.release() }
         return keep
+    }
+
+    /**
+     * Kandidáti na štvoruholník z kontúry: priama aproximácia štyrmi bodmi a rekonštrukcia
+     * zo štyroch najdlhších hrán (list so zahnutým alebo odtrhnutým rohom má päť a viac vrcholov;
+     * skrytý roh je priesečník predĺžených susedných hrán). Vráti len tvary, ktoré spĺňajú kritériá.
+     */
+    private fun toQuads(contour: MatOfPoint, w: Double, h: Double, c: DetectionCriteria): List<Quad> {
+        val out = ArrayList<Quad>(2)
+        toQuad(contour, w, h, c)?.let { out += it }
+        fromLongEdges(contour, w, h)?.let { q -> validate(q, w, h, c)?.let { out += it } }
+        return out
+    }
+
+    /** Štvoruholník zo štyroch najdlhších hrán konvexného obalu (pozri [toQuads]). */
+    private fun fromLongEdges(contour: MatOfPoint, w: Double, h: Double): Quad? {
+        val hullIdx = MatOfInt()
+        Imgproc.convexHull(contour, hullIdx)
+        val all = contour.toArray()
+        val hull = MatOfPoint2f(*hullIdx.toArray().map { all[it] }.toTypedArray())
+        hullIdx.release()
+        val peri = Imgproc.arcLength(hull, true)
+        val approx = MatOfPoint2f()
+        Imgproc.approxPolyDP(hull, approx, 0.012 * peri, true)
+        val p = approx.toArray()
+        approx.release()
+        hull.release()
+        if (p.size !in 5..10) return null
+        val n = p.size
+        val edges = (0 until n).map { i -> i to kotlin.math.hypot(p[(i + 1) % n].x - p[i].x, p[(i + 1) % n].y - p[i].y) }
+        val longest = edges.sortedByDescending { it.second }.take(4)
+        // Štyri strany listu musia tvoriť väčšinu obvodu (inak nejde o list s poškodeným rohom).
+        if (longest.sumOf { it.second } < 0.75 * peri) return null
+        val chosen = longest.map { it.first }.sorted()
+        val corners = ArrayList<Point>(4)
+        for (k in 0 until 4) {
+            val a = chosen[k]
+            val b = chosen[(k + 1) % 4]
+            val pt = intersect(p[a], p[(a + 1) % n], p[b], p[(b + 1) % n]) ?: return null
+            // Rekonštruovaný roh nesmie ležať ďaleko mimo záberu.
+            if (pt.x < -0.1 * w || pt.x > 1.1 * w || pt.y < -0.1 * h || pt.y > 1.1 * h) return null
+            corners += pt
+        }
+        return Quad.fromUnordered(corners.map { Pt(it.x / w, it.y / h) })
+    }
+
+    /** Priesečník priamok AB a CD, alebo null, ak sú takmer rovnobežné. */
+    private fun intersect(a: Point, b: Point, c: Point, d: Point): Point? {
+        val d1x = b.x - a.x; val d1y = b.y - a.y
+        val d2x = d.x - c.x; val d2y = d.y - c.y
+        val den = d1x * d2y - d1y * d2x
+        if (kotlin.math.abs(den) < 1e-6 * kotlin.math.hypot(d1x, d1y) * kotlin.math.hypot(d2x, d2y)) return null
+        val t = ((c.x - a.x) * d2y - (c.y - a.y) * d2x) / den
+        return Point(a.x + t * d1x, a.y + t * d1y)
     }
 
     /** Aproximuje kontúru štvoruholníkom; vráti null, ak to nejde alebo tvar nespĺňa geometrické kritériá. */
@@ -188,6 +243,11 @@ class DocumentDetector {
             return null
         }
 
+        return validate(result, w, h, c)
+    }
+
+    /** Geometrické kritériá (konvexnosť, plocha, pomer strán, orientácia, uhly). */
+    private fun validate(result: Quad, w: Double, h: Double, c: DetectionCriteria): Quad? {
         val aspect = w / h
         val area = result.area()
         val reason = when {

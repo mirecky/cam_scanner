@@ -200,4 +200,5 @@
     <string name="brush_medium">Medium</string>
     <string name="brush_large">Large</string>
     <string name="action_undo_stroke">Undo last stroke</string>
+    <string name="action_share_selected">Share selected pages</string>
 </resources>

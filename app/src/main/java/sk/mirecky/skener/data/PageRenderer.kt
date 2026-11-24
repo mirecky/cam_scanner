@@ -60,7 +60,11 @@ internal object PageRenderer {
         val cropped = if (quad != null) {
             val snap = if (mode == ScanMode.DOCUMENT) ImageOps.A4_RATIO else null
             val margin = if (mode == ScanMode.DOCUMENT) DOCUMENT_MARGIN else WHITEBOARD_MARGIN
-            ImageOps.cropDocument(bgr, quad, snap, margin).also { bgr.release() }
+            ImageOps.cropDocument(bgr, quad, snap, margin).also {
+                bgr.release()
+                // Zahnutý roh listu (kramlička): tmavý podklad v rohu sa nahradí papierom.
+                if (mode == ScanMode.DOCUMENT) ImageOps.fillDarkCorners(it)
+            }
         } else {
             bgr
         }

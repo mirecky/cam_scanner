@@ -210,6 +210,23 @@ class DocumentRepository(private val context: Context) {
         return true
     }
 
+    /**
+     * Dočasné PDF len z vybraných strán (v poradí dokumentu) na zdieľanie. Uloží sa do cache,
+     * nie do Dokumenty/Skener; staršie dočasné PDF sa pritom zmažú.
+     */
+    suspend fun exportPages(docId: String, pageIds: Set<String>): File? = withContext(Dispatchers.IO) {
+        val doc = document(docId) ?: return@withContext null
+        val pages = doc.pages.filter { it.id in pageIds }
+        if (pages.isEmpty()) return@withContext null
+        val dir = File(context.cacheDir, "share").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val numbers = doc.pages.withIndex().filter { it.value.id in pageIds }.map { it.index + 1 }
+        val label = if (numbers.size == 1) "strana-${numbers[0]}" else "strany-${numbers.joinToString("-")}".take(60)
+        val file = File(dir, "${doc.name}_$label.pdf")
+        PdfExporter.export(pages, file, ocr = ::ocr, font = { context.resources.openRawResource(R.font.onest_regular) }, compact = doc.compact)
+        file
+    }
+
     /** Zapne alebo vypne zmenšené PDF (PDF sa hneď prepočíta). */
     suspend fun setCompact(docId: String, compact: Boolean) {
         if (document(docId)?.compact == compact) return

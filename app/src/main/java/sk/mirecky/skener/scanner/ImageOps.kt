@@ -147,4 +147,59 @@ object ImageOps {
         listOf(from, to, m).forEach { it.release() }
         return out
     }
+
+    /**
+     * Vyplní tmavé plochy v rohoch orezanej strany farbou papiera. Vzniknú, keď má list zahnutý
+     * alebo odtrhnutý roh (kramlička): dopočítaný roh leží nad tmavým podkladom. Vyplní sa len
+     * tmavá súvislá plocha, ktorá sa dotýka rohu a nezasahuje ďaleko do strany, takže písmo
+     * pri okraji ostane. Vráti počet vyplnených rohov.
+     */
+    fun fillDarkCorners(bgr: Mat): Int {
+        val gray = Mat()
+        Imgproc.cvtColor(bgr, gray, Imgproc.COLOR_BGR2GRAY)
+        val w = gray.cols()
+        val h = gray.rows()
+        // Prah medzi papierom a podkladom: polovica jasu papiera (90. percentil).
+        val hist = Mat()
+        Imgproc.calcHist(listOf(gray), org.opencv.core.MatOfInt(0), Mat(), hist, org.opencv.core.MatOfInt(256), org.opencv.core.MatOfFloat(0f, 256f))
+        var acc = 0.0
+        var paper = 255
+        for (i in 0 until 256) {
+            acc += hist.get(i, 0)[0]
+            if (acc >= gray.total() * 0.9) { paper = i; break }
+        }
+        hist.release()
+        val dark = Mat()
+        Imgproc.threshold(gray, dark, paper * 0.5, 255.0, Imgproc.THRESH_BINARY_INV)
+        val labels = Mat()
+        val stats = Mat()
+        val centroids = Mat()
+        val count = Imgproc.connectedComponentsWithStats(dark, labels, stats, centroids, 8, CvType.CV_32S)
+        val probe = (minOf(w, h) * 0.01).toInt().coerceAtLeast(2)
+        val cornerPts = listOf(probe to probe, w - 1 - probe to probe, w - 1 - probe to h - 1 - probe, probe to h - 1 - probe)
+        val paperMask = Mat()
+        Core.bitwise_not(dark, paperMask)
+        val paperColor = Core.mean(bgr, paperMask)
+        var filled = 0
+        val done = HashSet<Int>()
+        for ((x, y) in cornerPts) {
+            val label = labels.get(y, x)[0].toInt()
+            if (label == 0 || label in done) continue
+            val bw = stats.get(label, Imgproc.CC_STAT_WIDTH)[0]
+            val bh = stats.get(label, Imgproc.CC_STAT_HEIGHT)[0]
+            val area = stats.get(label, Imgproc.CC_STAT_AREA)[0]
+            // Trojuholník v rohu: najviac 35 % šírky/výšky a zhruba polovica svojho obdĺžnika.
+            if (bw > 0.35 * w || bh > 0.35 * h || area < 0.3 * bw * bh) continue
+            val mask = Mat()
+            Core.compare(labels, org.opencv.core.Scalar(label.toDouble()), mask, Core.CMP_EQ)
+            // Mierne rozšírenie, aby neostal tmavý lem na hrane záhybu.
+            Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(5.0, 5.0)))
+            bgr.setTo(paperColor, mask)
+            mask.release()
+            done += label
+            filled++
+        }
+        listOf(gray, dark, labels, stats, centroids, paperMask).forEach { it.release() }
+        return filled
+    }
 }

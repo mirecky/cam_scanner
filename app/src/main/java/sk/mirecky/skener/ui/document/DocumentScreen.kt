@@ -85,6 +85,7 @@ import sk.mirecky.skener.data.DocumentItem
 import sk.mirecky.skener.data.PageItem
 import sk.mirecky.skener.ui.common.PageImage
 import sk.mirecky.skener.ui.common.sharePdf
+import sk.mirecky.skener.ui.common.sharePdfFile
 
 /**
  * Detail dokumentu: mriežka strán.
@@ -143,6 +144,19 @@ fun DocumentScreen(docId: String, onBack: () -> Unit, onAddPages: (String) -> Un
                         actions = {
                             IconButton(onClick = { selected = doc.pages.map { it.id }.toSet() }) {
                                 Icon(Icons.Outlined.SelectAll, stringResource(R.string.action_select_all))
+                            }
+                            // Zdieľať len vybrané strany (dočasné PDF).
+                            IconButton(
+                                onClick = {
+                                    val ids = selected
+                                    app.scope.launch {
+                                        val file = repository.exportPages(docId, ids)
+                                        if (file != null) sharePdfFile(context, file, file.nameWithoutExtension)
+                                    }
+                                },
+                                enabled = selected.isNotEmpty(),
+                            ) {
+                                Icon(Icons.Outlined.Share, stringResource(R.string.action_share_selected))
                             }
                             IconButton(onClick = { app.scope.launch { repository.rotate(docId, selected) } }, enabled = selected.isNotEmpty()) {
                                 Icon(Icons.Outlined.RotateRight, stringResource(R.string.action_rotate))
