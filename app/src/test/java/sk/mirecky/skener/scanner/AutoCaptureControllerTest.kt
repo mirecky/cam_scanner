@@ -36,8 +36,26 @@ class AutoCaptureControllerTest {
     }
 
     @Test fun capturesAfterDocumentIsStable() {
-        assertFalse(run(400) { frame() })
+        // Prvý list po zapnutí automatu potrebuje dlhší pokoj (ukladá sa rukou).
+        assertFalse(run(900) { frame() })
         assertTrue(run(400) { frame() })
+    }
+
+    @Test fun manualThenAutoCapturesFirstSheetOnce() {
+        // Ručný režim: list leží, nič sa nesníma.
+        assertFalse(run(2000, auto = false) { frame() })
+        // Ťuknutie na AUTO: krátko sa nesníma (ruka, otras), potom raz.
+        assertFalse(run(800) { frame() })
+        assertTrue(run(800) { frame() })
+        assertFalse(run(3000) { frame() })
+    }
+
+    @Test fun nextSheetsUseNormalStabilization() {
+        assertTrue(run(1300) { frame(fp = sheetA) })
+        run(300) { frame(motion = 25.0) }
+        run(400) { frame(q = null) }
+        // Ďalšie listy: bežné ustálenie (600 ms), nie predĺžené.
+        assertTrue(run(800) { frame(fp = sheetB) })
     }
 
     @Test fun doesNotCaptureWithoutDocument() {
@@ -62,7 +80,7 @@ class AutoCaptureControllerTest {
     }
 
     @Test fun sameSheetIsNotCapturedTwice() {
-        assertTrue(run(1000) { frame() })
+        assertTrue(run(1300) { frame() })
         // Ten istý list leží ďalej, nič sa nedeje.
         assertFalse(run(5000) { frame() })
         // Ruka prejde nad listom, ale list ostane ten istý.
@@ -71,7 +89,7 @@ class AutoCaptureControllerTest {
     }
 
     @Test fun newSheetOnSamePlaceIsCaptured() {
-        assertTrue(run(1000) { frame(fp = sheetA) })
+        assertTrue(run(1300) { frame(fp = sheetA) })
         // Výmena listu: pohyb a krátka strata dokumentu.
         assertFalse(run(300) { frame(motion = 25.0) })
         assertFalse(run(200) { frame(q = null) })
@@ -95,14 +113,14 @@ class AutoCaptureControllerTest {
     }
 
     @Test fun briefDetectionDropoutIsNotSheetChange() {
-        assertTrue(run(1000) { frame() })
+        assertTrue(run(1300) { frame() })
         // Detekcia na jeden-dva snímky „blikne“ (zlý snímok), list sa nemení.
         var i = 0
         assertFalse(run(4000) { i++; frame(q = if (i % 20 == 0) null else quad) })
     }
 
     @Test fun flickeringFingerprintOfSameSheetIsNotCapturedAgain() {
-        assertTrue(run(1000) { frame(fp = sheetA) })
+        assertTrue(run(1300) { frame(fp = sheetA) })
         var i = 0
         // Krátke výpadky detekcie bez pohybu; list je stále ten istý.
         assertFalse(run(5000) { i++; frame(q = if (i % 15 < 2) null else quad, fp = sheetA) })
@@ -111,7 +129,7 @@ class AutoCaptureControllerTest {
     @Test fun similarSheetAfterLiftingIsCaptured() {
         val d = AutoCaptureController.difference(sheetA, sheetA2)
         assertTrue("rozdiel $d", d > 0.025 && d < 0.06)
-        assertTrue(run(1000) { frame(fp = sheetA) })
+        assertTrue(run(1300) { frame(fp = sheetA) })
         // Podobný list (rovnaký formulár) položený po zdvihnutí predchádzajúceho.
         run(300) { frame(motion = 25.0) }
         run(400) { frame(q = null) }
@@ -119,7 +137,7 @@ class AutoCaptureControllerTest {
     }
 
     @Test fun similarSheetAfterMotionOnlyIsNotCaptured() {
-        assertTrue(run(1000) { frame(fp = sheetA) })
+        assertTrue(run(1300) { frame(fp = sheetA) })
         // Otras telefónu, list ostal ležať; odtlačok sa líši len šumom.
         run(300) { frame(motion = 25.0) }
         assertFalse(run(3000) { frame(fp = sheetA2) })

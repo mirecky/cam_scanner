@@ -52,11 +52,14 @@ data class DetectionCriteria(
     companion object {
         fun forMode(mode: ScanMode) = when (mode) {
             ScanMode.DOCUMENT -> DetectionCriteria(
+                // Formáty A4, A5 aj A6 majú rovnaký pomer strán (√2), stačí jedno kritérium.
                 // 4 % záberu: list A6 snímaný z 25–30 cm (bližšie hlavný fotoaparát nezaostrí).
-                minArea = 0.04, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.75, portraitOnly = true,
-                minAngle = 50.0, maxAngle = 130.0,
-                minSideContrast = 12.0, insideBrighter = true, preferA4 = true,
-                minInsideBrightness = 115.0,
+                // Uhly, kontrast hrán a jas papiera sú blízko režimu Tabuľa: malý list s ručným
+                // písmom pri slabšom svetle mal papier tmavší a hrany menej kontrastné.
+                minArea = 0.04, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.80, portraitOnly = true,
+                minAngle = 45.0, maxAngle = 135.0,
+                minSideContrast = 8.0, insideBrighter = true, preferA4 = true,
+                minInsideBrightness = 85.0,
             )
             ScanMode.WHITEBOARD -> DetectionCriteria(
                 minArea = 0.20, maxArea = 0.98, minSideRatio = 1.0, maxSideRatio = 3.0, portraitOnly = false,

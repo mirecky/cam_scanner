@@ -56,6 +56,11 @@ data class AutoCaptureConfig(
      * vtedy ide takmer isto o nový list, aj keď má rovnaké rozloženie (formuláre, výsledky vyšetrení).
      */
     val sameSheetDifferenceAfterLost: Double = 0.025,
+    /**
+     * Ustálenie pri prvom liste po zapnutí automatu: list sa ešte ukladá rukou na miesto,
+     * preto sa čaká dlhšie, aby sa nenasnímal posúvaný list alebo prsty.
+     */
+    val firstStableMs: Long = 1_100,
     /** Celkový posun od začiatku ustaľovania, ktorý ešte nie je „posúvanie záberu“ (násobok [maxCornerShift]). */
     val maxDriftFactor: Double = 3.0,
 )
@@ -83,17 +88,30 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
     /** Zmena v zábere bola zmiznutie dokumentu (zdvihnutý list), nie iba pohyb. */
     private var sheetLifted = false
     private var lostSince = -1L
+    private var autoWasEnabled = false
+    /** Najbližšie snímanie je prvé po zapnutí automatu. */
+    private var firstAfterArm = false
     private var lastCaptureAt = Long.MIN_VALUE / 2
 
     /**
      * Spracuje snímok. Vráti nový stav a príznak, či sa má práve teraz nasnímať strana
-     * (iba ak [autoEnabled]).
+     * (iba ak [autoEnabled] a práve sa neukladá iná snímka – [busy]).
      */
-    fun onFrame(frame: FrameObservation, autoEnabled: Boolean): Pair<CaptureState, Boolean> {
+    fun onFrame(frame: FrameObservation, autoEnabled: Boolean, busy: Boolean = false): Pair<CaptureState, Boolean> {
         val quad = frame.quad
         val moving = frame.motion > config.motionThreshold
 
         if (phase == CapturePhase.CAPTURING) return CaptureState(phase) to false
+
+        // Zapnutie automatu (prepínač AUTO): ustálenie začne odznova, aby sa nenasnímalo
+        // hneď po ťuknutí na displej, a prvý list potrebuje o niečo dlhší pokoj.
+        if (autoEnabled && !autoWasEnabled) {
+            firstAfterArm = true
+            anchor = null
+            previous = null
+            if (phase == CapturePhase.STABILIZING) phase = CapturePhase.SEARCHING
+        }
+        autoWasEnabled = autoEnabled
 
         // Ako dlho už dokument v zábere chýba (krátke výpadky detekcie sa neberú ako výmena listu).
         if (quad == null) {
@@ -133,8 +151,9 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
         }
 
         val elapsed = frame.timeMs - stableSince
-        val progress = (elapsed.toFloat() / config.stableMs).coerceIn(0f, 1f)
-        if (elapsed < config.stableMs || !frame.sharp) {
+        val needed = if (firstAfterArm) config.firstStableMs else config.stableMs
+        val progress = (elapsed.toFloat() / needed).coerceIn(0f, 1f)
+        if (elapsed < needed || !frame.sharp) {
             return CaptureState(phase, progress = progress) to false
         }
 
@@ -150,13 +169,14 @@ class AutoCaptureController(private val config: AutoCaptureConfig = AutoCaptureC
             return CaptureState(phase, sameAsLast = true, difference = difference) to false
         }
 
-        if (!autoEnabled || frame.timeMs - lastCaptureAt < config.minIntervalMs) {
+        if (!autoEnabled || busy || frame.timeMs - lastCaptureAt < config.minIntervalMs) {
             return CaptureState(phase, progress = 1f, difference = difference) to false
         }
 
         phase = CapturePhase.CAPTURING
         lastCaptureAt = frame.timeMs
         sheetLifted = false
+        firstAfterArm = false
         return CaptureState(phase, progress = 1f, difference = difference) to true
     }
 

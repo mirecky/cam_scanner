@@ -237,7 +237,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             motion = result.motion,
             fingerprint = result.fingerprint,
         )
-        val (state, trigger) = synchronized(auto) { auto.onFrame(observation, autoEnabled && !saving) }
+        val (state, trigger) = synchronized(auto) { auto.onFrame(observation, autoEnabled, busy = saving) }
         _overlay.value = OverlayState(
             quad = detection?.quad,
             aspect = result.aspect,
