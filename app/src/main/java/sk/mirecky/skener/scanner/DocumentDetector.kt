@@ -48,6 +48,11 @@ data class DetectionCriteria(
     val preferA4: Boolean,
     /** Minimálny priemerný jas vnútri (papier je svetlý); 0 = nekontroluje sa. */
     val minInsideBrightness: Double,
+    /**
+     * Pomer strán, pri ktorom sa prijme aj list na šírku (napr. telefón v stojane otočený bokom).
+     * Úzky rozsah okolo √2 (A formáty) vylúči obrazovky 16:9 a 16:10.
+     */
+    val landscapeRatio: ClosedFloatingPointRange<Double>? = null,
 ) {
     companion object {
         fun forMode(mode: ScanMode) = when (mode) {
@@ -62,6 +67,7 @@ data class DetectionCriteria(
                 minAngle = 45.0, maxAngle = 135.0,
                 minSideContrast = 8.0, insideBrighter = true, preferA4 = true,
                 minInsideBrightness = 85.0,
+                landscapeRatio = 1.27..1.56,
             )
             ScanMode.WHITEBOARD -> DetectionCriteria(
                 minArea = 0.20, maxArea = 0.98, minSideRatio = 1.0, maxSideRatio = 3.0, portraitOnly = false,
@@ -188,7 +194,7 @@ class DocumentDetector {
             !result.isConvex() -> "nekonvexný"
             area < c.minArea || area > c.maxArea -> "plocha %.2f".format(area)
             result.sideRatio(aspect) !in c.minSideRatio..c.maxSideRatio -> "pomer strán %.2f".format(result.sideRatio(aspect))
-            c.portraitOnly && !result.isPortrait(aspect) -> "na šírku"
+            c.portraitOnly && !result.isPortrait(aspect) && c.landscapeRatio?.contains(result.sideRatio(aspect)) != true -> "na šírku (pomer %.2f)".format(result.sideRatio(aspect))
             result.angles(aspect).any { it < c.minAngle || it > c.maxAngle } -> "uhly ${result.angles(aspect).map { it.toInt() }}"
             else -> null
         }
