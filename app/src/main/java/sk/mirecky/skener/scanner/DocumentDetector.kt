@@ -56,7 +56,9 @@ data class DetectionCriteria(
                 // 4 % záberu: list A6 snímaný z 25–30 cm (bližšie hlavný fotoaparát nezaostrí).
                 // Uhly, kontrast hrán a jas papiera sú blízko režimu Tabuľa: malý list s ručným
                 // písmom pri slabšom svetle mal papier tmavší a hrany menej kontrastné.
-                minArea = 0.04, maxArea = 0.97, minSideRatio = 1.15, maxSideRatio = 1.80, portraitOnly = true,
+                // Pomer strán od 1,0: list fotený zošikma (do ~45°) sa v obraze skráti; na výšku
+                // musí ostať, čo spolu so svetlým vnútrom odmieta obrazovky a iné predmety.
+                minArea = 0.04, maxArea = 0.97, minSideRatio = 1.0, maxSideRatio = 1.80, portraitOnly = true,
                 minAngle = 45.0, maxAngle = 135.0,
                 minSideContrast = 8.0, insideBrighter = true, preferA4 = true,
                 minInsideBrightness = 85.0,

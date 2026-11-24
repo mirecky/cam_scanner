@@ -87,11 +87,22 @@ object ImageOps {
         var outW = max(d(quad.tl, quad.tr), d(quad.bl, quad.br))
         var outH = max(d(quad.tl, quad.bl), d(quad.tr, quad.br))
         if (snapRatio != null) {
-            val portrait = outH >= outW
-            val measured = if (portrait) outH / outW else outW / outH
+            // Orientácia z priemerných dĺžok strán (ako v detektore): pri fotení zošikma je
+            // bližšia hrana výrazne dlhšia a samotné maximum by list „otočilo“ na šírku.
+            val avgW = (d(quad.tl, quad.tr) + d(quad.bl, quad.br)) / 2
+            val avgH = (d(quad.tl, quad.bl) + d(quad.tr, quad.br)) / 2
+            val portrait = avgH >= avgW
+            val measured = if (portrait) avgH / avgW else avgW / avgH
             if (kotlin.math.abs(measured - snapRatio) / snapRatio <= SNAP_TOLERANCE) {
-                // Zachová sa dlhšia strana, kratšia sa dopočíta.
-                if (portrait) outW = outH / snapRatio else outH = outW / snapRatio
+                // Zachová sa najdlhšia nameraná strana (rozlíšenie), druhá sa dopočíta.
+                val long = max(outW, outH)
+                if (portrait) {
+                    outH = long
+                    outW = long / snapRatio
+                } else {
+                    outW = long
+                    outH = long / snapRatio
+                }
             }
         }
         val ow = outW.roundToInt().coerceAtLeast(1)
@@ -109,8 +120,11 @@ object ImageOps {
 
     private data class Rect4(val x0: Double, val y0: Double, val x1: Double, val y1: Double)
 
-    /** Najväčšia relatívna odchýlka nameraného pomeru strán, pri ktorej sa ešte prispôsobí formátu. */
-    private const val SNAP_TOLERANCE = 0.15
+    /**
+     * Najväčšia relatívna odchýlka nameraného pomeru strán, pri ktorej sa ešte prispôsobí formátu.
+     * Široká, lebo list fotený zošikma má v obraze výrazne skrátenú výšku (A4, A5 aj A6 majú pomer √2).
+     */
+    private const val SNAP_TOLERANCE = 0.30
 
     private fun warp(
         src: Mat,
