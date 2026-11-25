@@ -132,8 +132,11 @@ class DocumentDetector {
 
         var best: Detection? = null
         var bestScore = 0.0
-        for (contour in candidates) {
-          for (quad in toQuads(contour, w, h, criteria)) {
+        val quads = candidates.flatMap { toQuads(it, w, h, criteria) }.toMutableList()
+        // Tabuľa: kandidáti aj z rovných čiar rámu (obrys často „uteká“ po kábli či tieni).
+        if (!criteria.insideBrighter) quads += lineCandidates(w, h, criteria)
+        run {
+          for (quad in quads) {
             val detection = evaluate(quad, gray, w, h, criteria) ?: continue
             // Pri dokumente majú prednosť tvary s pomerom strán blízkym A4.
             val ratioPenalty = if (criteria.preferA4) {
@@ -141,7 +144,10 @@ class DocumentDetector {
             } else {
                 1.0
             }
-            val score = detection.areaFraction * minOf(detection.contrast, 60.0) * ratioPenalty
+            // Tabuľa sa fotí spredu: protiľahlé strany sú takmer rovnobežné. Tvar so stranou
+            // „ujdenou“ po kábli alebo tieni (výrazne nerovnobežnou) dostane nižšie skóre.
+            val parallel = if (criteria.preferA4) 1.0 else parallelism(quad, w / h)
+            val score = detection.areaFraction * minOf(detection.contrast, 60.0) * ratioPenalty * parallel
             if (score > bestScore) {
                 bestScore = score
                 best = detection
@@ -173,6 +179,69 @@ class DocumentDetector {
         toQuad(contour, w, h, c)?.let { out += it }
         fromLongEdges(contour, w, h)?.let { q -> validate(q, w, h, c)?.let { out += it } }
         return out
+    }
+
+    /** 1 pre rovnobežné protiľahlé strany, menej pri rozdiele smerov (Gaussovsky, 15°). */
+    private fun parallelism(q: Quad, aspect: Double): Double {
+        val c = q.corners.map { Pair(it.x * aspect, it.y) }
+        fun dir(a: Int, b: Int) = kotlin.math.atan2(c[b].second - c[a].second, c[b].first - c[a].first)
+        fun diff(a: Double, b: Double): Double {
+            var d = Math.toDegrees(kotlin.math.abs(a - b)) % 180.0
+            if (d > 90) d = 180 - d
+            return d
+        }
+        val top = dir(0, 1); val bottom = dir(3, 2); val left = dir(0, 3); val right = dir(1, 2)
+        val worst = maxOf(diff(top, bottom), diff(left, right))
+        return kotlin.math.exp(-(worst / 15.0) * (worst / 15.0))
+    }
+
+    /**
+     * Kandidáti z rovných čiar (Houghova transformácia): najdlhšie takmer vodorovné a takmer zvislé
+     * čiary, ich dvojice a priesečníky. Prejdú len tvary s hranou pozdĺž všetkých štyroch strán.
+     */
+    private fun lineCandidates(w: Double, h: Double, c: DetectionCriteria): List<Quad> {
+        val lines = Mat()
+        Imgproc.HoughLinesP(edges, lines, 1.0, Math.PI / 180, 60, minOf(w, h) * 0.3, 10.0)
+        class Seg(val x1: Double, val y1: Double, val x2: Double, val y2: Double) {
+            val len = kotlin.math.hypot(x2 - x1, y2 - y1)
+            val horizontal = kotlin.math.abs(y2 - y1) < kotlin.math.abs(x2 - x1) * 0.45
+            val vertical = kotlin.math.abs(x2 - x1) < kotlin.math.abs(y2 - y1) * 0.45
+            /** Poloha čiary v strede obrazu (y pre vodorovné, x pre zvislé). */
+            fun mid(): Double = if (horizontal) y1 + (y2 - y1) * ((w / 2 - x1) / (x2 - x1)) else x1 + (x2 - x1) * ((h / 2 - y1) / (y2 - y1))
+        }
+        val segs = ArrayList<Seg>()
+        for (i in 0 until lines.rows()) {
+            val v = lines.get(i, 0)
+            segs += Seg(v[0], v[1], v[2], v[3])
+        }
+        lines.release()
+        // Zlúčenie takmer totožných čiar; z každej skupiny ostane najdlhší úsek.
+        fun pick(list: List<Seg>): List<Seg> {
+            val out = ArrayList<Seg>()
+            for (s in list.sortedByDescending { it.len }) {
+                if (out.none { kotlin.math.abs(it.mid() - s.mid()) < 8 }) out += s
+                if (out.size == 6) break
+            }
+            return out
+        }
+        val hs = pick(segs.filter { it.horizontal })
+        val vs = pick(segs.filter { it.vertical })
+        val out = ArrayList<Pair<Quad, Double>>()
+        for (i in hs.indices) for (j in i + 1 until hs.size) {
+            val (t, b) = if (hs[i].mid() < hs[j].mid()) hs[i] to hs[j] else hs[j] to hs[i]
+            if (b.mid() - t.mid() < 0.25 * h) continue
+            for (k in vs.indices) for (m in k + 1 until vs.size) {
+                val (l, r) = if (vs[k].mid() < vs[m].mid()) vs[k] to vs[m] else vs[m] to vs[k]
+                if (r.mid() - l.mid() < 0.25 * w) continue
+                fun x(a: Seg, b: Seg) = intersect(Point(a.x1, a.y1), Point(a.x2, a.y2), Point(b.x1, b.y1), Point(b.x2, b.y2))
+                val pts = listOf(x(t, l), x(t, r), x(b, r), x(b, l))
+                if (pts.any { it == null || it.x < -0.05 * w || it.x > 1.05 * w || it.y < -0.05 * h || it.y > 1.05 * h }) continue
+                val quad = validate(Quad.fromUnordered(pts.map { Pt(it!!.x / w, it.y / h) }), w, h, c) ?: continue
+                val support = minSideLineSupport(quad, w, h)
+                if (support >= MIN_LINE_SUPPORT) out += quad to quad.area() * support
+            }
+        }
+        return out.sortedByDescending { it.second }.take(3).map { it.first }
     }
 
     /** Štvoruholník zo štyroch najdlhších hrán konvexného obalu (pozri [toQuads]). */
@@ -272,10 +341,14 @@ class DocumentDetector {
             log?.invoke("zamietnutý $quad: presahuje záber")
             return null
         }
-        if (contrast < c.minSideContrast) {
-            log?.invoke("zamietnutý $quad: kontrast strany %.1f".format(contrast))
+        // Tabuľa na bielej stene nemá rozdiel jasu vnútri a vonku; jej hranu tvorí rám (tenká línia).
+        // Ako náhradný dôkaz hrany stačí ostrý prechod jasu pozdĺž väčšiny každej strany.
+        val support = if (!c.insideBrighter && contrast < c.minSideContrast) minSideLineSupport(quad, w, h) else 0.0
+        if (contrast < c.minSideContrast && support < MIN_LINE_SUPPORT) {
+            log?.invoke("zamietnutý $quad: kontrast strany %.1f, línia hrany %.2f".format(contrast, support))
             return null
         }
+        val effectiveContrast = if (contrast >= c.minSideContrast) contrast else LINE_CONTRAST * support
 
         val mask = Mat.zeros(gray.size(), CvType.CV_8UC1)
         val poly = MatOfPoint(*quad.corners.map { Point(it.x * w, it.y * h) }.toTypedArray())
@@ -296,7 +369,7 @@ class DocumentDetector {
         val sharpRatio = sharpness / laplacianVariance(reblurred, mask).coerceAtLeast(1e-3)
         mask.release()
 
-        return Detection(quad, contrast, quad.area(), sharpness, sharpRatio)
+        return Detection(quad, effectiveContrast, quad.area(), sharpness, sharpRatio)
     }
 
     private fun laplacianVariance(src: Mat, mask: Mat): Double {
@@ -307,6 +380,48 @@ class DocumentDetector {
         val v = std.toArray()[0].let { it * it }
         mean.release(); std.release()
         return v
+    }
+
+    /**
+     * Pre každú stranu podiel vzoriek, pri ktorých naprieč stranou (±[LINE_RANGE] px) leží ostrý
+     * prechod jasu – rám tabule alebo hrana predmetu. Vráti najmenší podiel spomedzi štyroch strán.
+     */
+    private fun minSideLineSupport(quad: Quad, w: Double, h: Double): Double {
+        val c = quad.corners.map { Pair(it.x * w, it.y * h) }
+        val maxX = blurred.cols() - 1
+        val maxY = blurred.rows() - 1
+        var worst = 1.0
+        for (i in 0 until 4) {
+            val (ax, ay) = c[i]
+            val (bx, by) = c[(i + 1) % 4]
+            val len = kotlin.math.hypot(bx - ax, by - ay).coerceAtLeast(1e-6)
+            val nx = -(by - ay) / len
+            val ny = (bx - ax) / len
+            var hit = 0
+            var total = 0
+            for (s in 0 until SAMPLES_PER_SIDE) {
+                val t = 0.1 + 0.8 * (s + 0.5) / SAMPLES_PER_SIDE
+                val px = ax + (bx - ax) * t
+                val py = ay + (by - ay) * t
+                var prev = Double.NaN
+                var best = 0.0
+                var inside = true
+                for (k in -LINE_RANGE..LINE_RANGE) {
+                    val x = (px + nx * k).toInt()
+                    val y = (py + ny * k).toInt()
+                    if (x !in 0..maxX || y !in 0..maxY) { inside = false; break }
+                    val v = blurred.get(y, x)[0]
+                    if (!prev.isNaN()) best = maxOf(best, kotlin.math.abs(v - prev))
+                    prev = v
+                }
+                if (!inside) continue
+                total++
+                if (best >= LINE_STEP) hit++
+            }
+            if (total < SAMPLES_PER_SIDE / 2) return 0.0
+            worst = minOf(worst, hit.toDouble() / total)
+        }
+        return worst
     }
 
     /**
@@ -366,6 +481,14 @@ class DocumentDetector {
         /** Vzdialenosť vzoriek od strany v pixeloch analyzovaného obrazu. */
         const val CONTRAST_OFFSET = 6.0
         val EPSILONS = doubleArrayOf(0.02, 0.03, 0.04, 0.06)
+        /** Polovičná šírka pásu naprieč stranou, v ktorom sa hľadá línia hrany (px). */
+        const val LINE_RANGE = 6
+        /** Najmenší skok jasu medzi susednými pixelmi, ktorý sa počíta ako hrana. */
+        const val LINE_STEP = 7.0
+        /** Najmenší podiel vzoriek s hranou na každej strane (náhrada kontrastu pri tabuli). */
+        const val MIN_LINE_SUPPORT = 0.7
+        /** Kontrast priradený plnej podpore línie (pre porovnanie kandidátov). */
+        const val LINE_CONTRAST = 30.0
         /** Ďalšie rozmazanie pri meraní ostrosti nezávislej od obsahu. */
         const val REBLUR_SIGMA = 1.5
     }
