@@ -259,5 +259,6 @@ internal object PageRenderer {
      * Dokument: 2 mm z 210 mm šírky A4 – tlačiarne aj tak netlačia bližšie ako 3–5 mm od okraja.
      */
     private const val DOCUMENT_MARGIN = 2.0 / 210.0
-    private const val WHITEBOARD_MARGIN = 0.004
+    /** Tabuľa: 1 % kratšej strany, aby na okraji neostal hliníkový rám. */
+    private const val WHITEBOARD_MARGIN = 0.010
 }
