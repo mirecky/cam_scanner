@@ -58,7 +58,8 @@ internal object PdfExporter {
                 val image = when (page.filter) {
                     PageFilter.BLACK_WHITE -> bilevel(doc, page.displayFile, q)
                     PageFilter.GRAYSCALE -> jpeg(doc, page.displayFile, gray = true, q)
-                    PageFilter.ORIGINAL -> jpeg(doc, page.displayFile, gray = false, q)
+                    // Tabuľa: farby fixiek sa zachovajú vždy, aj keď je farebných čiar málo.
+                    PageFilter.ORIGINAL, PageFilter.WHITEBOARD -> jpeg(doc, page.displayFile, gray = false, q)
                     else -> jpeg(doc, page.displayFile, gray = null, q)
                 }
                 val height = PAGE_WIDTH_PT * image.height / image.width
@@ -151,7 +152,7 @@ internal object PdfExporter {
         Imgproc.threshold(sat, colored, GRAY_SATURATION.toDouble(), 255.0, Imgproc.THRESH_BINARY)
         val share = Core.countNonZero(colored).toDouble() / colored.total()
         listOf(small, hsv, sat, colored).forEach { it.release() }
-        return share < 0.01
+        return share < 0.002
     }
 
     /** 1-bitový obraz: bit 1 = biela, 0 = čierna (DeviceGray). */
