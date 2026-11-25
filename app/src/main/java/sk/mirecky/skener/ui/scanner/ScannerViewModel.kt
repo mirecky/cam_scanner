@@ -109,6 +109,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     @Volatile var currentMode = ScanMode.DOCUMENT
         private set
     @Volatile private var latest: AnalysisResult? = null
+    /** Otočenie senzora voči telefónu na výšku (zvyčajne 90°). */
+    @Volatile private var sensorRotation = 90
     @Volatile private var saving = false
     private var camera: LifecycleCameraController? = null
 
@@ -187,7 +189,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         camera = controller
         // Nastavený jas platí, kým je aplikácia otvorená; po pripojení kamery sa znova uplatní.
         controller?.initializationFuture?.addListener(
-            { applyExposure(_exposure.value) },
+            {
+                applyExposure(_exposure.value)
+                controller.cameraInfo?.let { sensorRotation = it.sensorRotationDegrees }
+            },
             ContextCompat.getMainExecutor(getApplication()),
         )
     }
@@ -238,9 +243,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             fingerprint = result.fingerprint,
         )
         val (state, trigger) = synchronized(auto) { auto.onFrame(observation, autoEnabled, busy = saving) }
+        // Telefón otočený na šírku: snímka (aj fotografia) je otočená, displej ostáva na výšku.
+        // Obrys sa na displej prenesie otočený späť; na orez sa používa pôvodný (pozri takePicture).
+        val turn = ((result.rotationDegrees - sensorRotation) % 360 + 360) % 360
         _overlay.value = OverlayState(
-            quad = detection?.quad,
-            aspect = result.aspect,
+            quad = detection?.quad?.let { toDisplay(it, turn) },
+            aspect = if (turn == 90 || turn == 270) 1.0 / result.aspect else result.aspect,
             capture = state,
             sharp = sharp,
             outOfFrame = detection == null && result.outOfFrame,
@@ -275,6 +283,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 processing.value -= remaining
             }
         }
+    }
+
+    /** Prevedie obrys zo vzpriamenej snímky do súradníc displeja na výšku (otočenie o [turn]° späť). */
+    private fun toDisplay(q: Quad, turn: Int): Quad {
+        fun map(p: sk.mirecky.skener.scanner.Pt) = when (turn) {
+            90 -> sk.mirecky.skener.scanner.Pt(p.y, 1 - p.x)
+            180 -> sk.mirecky.skener.scanner.Pt(1 - p.x, 1 - p.y)
+            270 -> sk.mirecky.skener.scanner.Pt(1 - p.y, p.x)
+            else -> p
+        }
+        return Quad(map(q.tl), map(q.tr), map(q.br), map(q.bl))
     }
 
     /** Ručné snímanie spúšťou; ak je v zábere nájdený dokument, oreže sa podľa neho. */

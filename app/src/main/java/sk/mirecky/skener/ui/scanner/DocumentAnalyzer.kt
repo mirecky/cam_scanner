@@ -26,6 +26,8 @@ class AnalysisResult(
     val rejection: String?,
     /** Dokument je v zábere, ale presahuje jeho okraj. */
     val outOfFrame: Boolean = false,
+    /** Otočenie snímky voči senzoru (mení sa s otočením telefónu; rovnaké ako pri fotografii). */
+    val rotationDegrees: Int = 0,
 )
 
 /**
@@ -51,7 +53,7 @@ class DocumentAnalyzer(
             val fingerprint = detection?.let { ImageOps.fingerprint(gray, it.quad) }
             val aspect = gray.cols().toDouble() / gray.rows()
             gray.release()
-            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect, lastRejection, detector.outOfFrame))
+            onResult(AnalysisResult(System.currentTimeMillis(), detection, motion, fingerprint, aspect, lastRejection, detector.outOfFrame, image.imageInfo.rotationDegrees))
         } finally {
             image.close()
         }
@@ -85,15 +87,17 @@ class DocumentAnalyzer(
         roi.release()
         full.release()
 
-        if (upright.cols() <= TARGET_WIDTH) return upright
-        val scale = TARGET_WIDTH.toDouble() / upright.cols()
+        // Dlhšia strana 640 px bez ohľadu na orientáciu (telefón na výšku aj otočený na šírku).
+        val longest = maxOf(upright.cols(), upright.rows())
+        if (longest <= TARGET_LONG_SIDE) return upright
+        val scale = TARGET_LONG_SIDE.toDouble() / longest
         val small = Mat()
-        Imgproc.resize(upright, small, Size(TARGET_WIDTH.toDouble(), upright.rows() * scale), 0.0, 0.0, Imgproc.INTER_AREA)
+        Imgproc.resize(upright, small, Size(upright.cols() * scale, upright.rows() * scale), 0.0, 0.0, Imgproc.INTER_AREA)
         upright.release()
         return small
     }
 
     private companion object {
-        const val TARGET_WIDTH = 480
+        const val TARGET_LONG_SIDE = 640
     }
 }
