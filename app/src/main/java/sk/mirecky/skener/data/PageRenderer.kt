@@ -24,8 +24,8 @@ internal object PageRenderer {
     const val CLEAN_FILE = "clean.png"
     /** Šírka obrazu pri dopočítaní vyčistených miest originálu. */
     private const val INPAINT_WIDTH = 1200.0
-    /** Kratšia strana obrazu pri hľadaní dokumentu (zodpovedá analýze z kamery). */
-    private const val ANALYSIS_WIDTH = 480
+    /** Dlhšia strana obrazu pri hľadaní dokumentu (zodpovedá analýze z kamery). */
+    private const val ANALYSIS_LONG_SIDE = 640
     /** Šírka vykreslenej strany staršieho PDF (300 dpi pre A4). */
     private const val MAX_PDF_WIDTH = 2480
 
@@ -79,12 +79,13 @@ internal object PageRenderer {
      * Nájde dokument na fotografii (import z galérie). Fotografia sa zmenší na rozlíšenie
      * analýzy z kamery, na ktoré je detektor nastavený. Vráti null, ak sa dokument nenašiel.
      */
-    fun detect(original: File): Quad? {
+    fun detect(original: File, mode: ScanMode = ScanMode.DOCUMENT): Quad? {
         val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(original)) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             val w = info.size.width
             val h = info.size.height
-            val scale = ANALYSIS_WIDTH.toDouble() / minOf(w, h)
+            // Rovnaké rozlíšenie ako živá analýza z kamery (dlhšia strana 640 px).
+            val scale = ANALYSIS_LONG_SIDE.toDouble() / maxOf(w, h)
             if (scale < 1) decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
         }
         val rgba = Mat()
@@ -95,7 +96,7 @@ internal object PageRenderer {
         rgba.release()
         val detector = DocumentDetector()
         return try {
-            detector.detect(gray, ScanMode.DOCUMENT)?.quad
+            detector.detect(gray, mode)?.quad
         } finally {
             detector.release()
             gray.release()

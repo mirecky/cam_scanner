@@ -236,8 +236,9 @@ private fun detect(image: ImageBitmap, page: PageItem): Quad? {
     Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
     rgba.release()
     val small = Mat()
-    val f = 480.0 / gray.cols()
-    Imgproc.resize(gray, small, org.opencv.core.Size(480.0, gray.rows() * f), 0.0, 0.0, Imgproc.INTER_AREA)
+    // Rovnaké rozlíšenie ako živá analýza z kamery (dlhšia strana 640 px, aj pri fotke na šírku).
+    val f = 640.0 / max(gray.cols(), gray.rows())
+    Imgproc.resize(gray, small, org.opencv.core.Size(gray.cols() * f, gray.rows() * f), 0.0, 0.0, Imgproc.INTER_AREA)
     gray.release()
     val detector = DocumentDetector()
     return detector.detect(small, page.mode).also {

@@ -316,7 +316,15 @@ class DocumentRepository(private val context: Context) {
 
     /** Spracuje nasnímanú fotografiu a pridá stranu na koniec dokumentu. */
     suspend fun addPage(slot: PageSlot, quad: Quad?, mode: ScanMode, filter: PageFilter? = null) {
+        val fromCamera = filter == null
         val filter = filter ?: PageFilter.defaultFor(mode)
+        // Živá detekcia v kamere nič nenašla (ručná spúšť, chvenie ruky): dokument alebo tabuľa
+        // sa ešte hľadá na samotnej fotografii, aby sa strana orezala automaticky.
+        val quad = quad ?: if (fromCamera) {
+            withContext(Dispatchers.Default) { runCatching { PageRenderer.detect(slot.originalFile, mode) }.getOrNull() }
+        } else {
+            null
+        }
         val page = PageItem(slot.pageId, slot.dir, filter, level = 0, mode = mode, rotation = 0, quad = quad, version = System.currentTimeMillis())
         withContext(Dispatchers.Default) {
             try {

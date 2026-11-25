@@ -11,6 +11,13 @@ import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
+/** Úsečka z Houghovej transformácie (súradnice v pixeloch analyzovaného obrazu). */
+private class Seg(val x1: Double, val y1: Double, val x2: Double, val y2: Double) {
+    val len = kotlin.math.hypot(x2 - x1, y2 - y1)
+    val horizontal = kotlin.math.abs(y2 - y1) < kotlin.math.abs(x2 - x1) * 0.45
+    val vertical = kotlin.math.abs(x2 - x1) < kotlin.math.abs(y2 - y1) * 0.45
+}
+
 /** Výsledok detekcie v jednom snímku analýzy. */
 data class Detection(
     val quad: Quad,
@@ -133,8 +140,13 @@ class DocumentDetector {
         var best: Detection? = null
         var bestScore = 0.0
         val quads = candidates.flatMap { toQuads(it, w, h, criteria) }.toMutableList()
-        // Tabuľa: kandidáti aj z rovných čiar rámu (obrys často „uteká“ po kábli či tieni).
-        if (!criteria.insideBrighter) quads += lineCandidates(w, h, criteria)
+        // Tabuľa: kandidáti aj z rovných čiar rámu (obrys často „uteká“ po kábli či tieni)
+        // a obrysy so stranou dorovnanou na rovnobežnú čiaru rámu.
+        if (!criteria.insideBrighter) {
+            computeSegments(w, h)
+            quads += quads.mapNotNull { q -> refineSides(q, w, h)?.let { validate(it, w, h, criteria) } }
+            quads += lineCandidates(w, h, criteria)
+        }
         run {
           for (quad in quads) {
             val detection = evaluate(quad, gray, w, h, criteria) ?: continue
@@ -200,21 +212,8 @@ class DocumentDetector {
      * čiary, ich dvojice a priesečníky. Prejdú len tvary s hranou pozdĺž všetkých štyroch strán.
      */
     private fun lineCandidates(w: Double, h: Double, c: DetectionCriteria): List<Quad> {
-        val lines = Mat()
-        Imgproc.HoughLinesP(edges, lines, 1.0, Math.PI / 180, 60, minOf(w, h) * 0.3, 10.0)
-        class Seg(val x1: Double, val y1: Double, val x2: Double, val y2: Double) {
-            val len = kotlin.math.hypot(x2 - x1, y2 - y1)
-            val horizontal = kotlin.math.abs(y2 - y1) < kotlin.math.abs(x2 - x1) * 0.45
-            val vertical = kotlin.math.abs(x2 - x1) < kotlin.math.abs(y2 - y1) * 0.45
-            /** Poloha čiary v strede obrazu (y pre vodorovné, x pre zvislé). */
-            fun mid(): Double = if (horizontal) y1 + (y2 - y1) * ((w / 2 - x1) / (x2 - x1)) else x1 + (x2 - x1) * ((h / 2 - y1) / (y2 - y1))
-        }
-        val segs = ArrayList<Seg>()
-        for (i in 0 until lines.rows()) {
-            val v = lines.get(i, 0)
-            segs += Seg(v[0], v[1], v[2], v[3])
-        }
-        lines.release()
+        val segs = segments
+        fun Seg.mid(): Double = if (horizontal) y1 + (y2 - y1) * ((w / 2 - x1) / (x2 - x1)) else x1 + (x2 - x1) * ((h / 2 - y1) / (y2 - y1))
         // Zlúčenie takmer totožných čiar; z každej skupiny ostane najdlhší úsek.
         fun pick(list: List<Seg>): List<Seg> {
             val out = ArrayList<Seg>()
@@ -224,8 +223,27 @@ class DocumentDetector {
             }
             return out
         }
-        val hs = pick(segs.filter { it.horizontal })
-        val vs = pick(segs.filter { it.vertical })
+        return lineQuads(pick(segs.filter { it.horizontal }), pick(segs.filter { it.vertical }), w, h, c)
+    }
+
+    /** Úsečky z Houghovej transformácie hrán aktuálneho snímku (len režim Tabuľa). */
+    private var segments: List<Seg> = emptyList()
+
+    private fun computeSegments(w: Double, h: Double) {
+        val lines = Mat()
+        Imgproc.HoughLinesP(edges, lines, 1.0, Math.PI / 180, 60, minOf(w, h) * 0.3, 10.0)
+        val segs = ArrayList<Seg>()
+        for (i in 0 until lines.rows()) {
+            val v = lines.get(i, 0)
+            segs += Seg(v[0], v[1], v[2], v[3])
+        }
+        lines.release()
+        segments = segs
+    }
+
+    /** Štvoruholníky z dvojíc vodorovných a zvislých čiar; prejdú len tvary s hranou na všetkých stranách. */
+    private fun lineQuads(hs: List<Seg>, vs: List<Seg>, w: Double, h: Double, c: DetectionCriteria): List<Quad> {
+        fun Seg.mid(): Double = if (horizontal) y1 + (y2 - y1) * ((w / 2 - x1) / (x2 - x1)) else x1 + (x2 - x1) * ((h / 2 - y1) / (y2 - y1))
         val out = ArrayList<Pair<Quad, Double>>()
         for (i in hs.indices) for (j in i + 1 until hs.size) {
             val (t, b) = if (hs[i].mid() < hs[j].mid()) hs[i] to hs[j] else hs[j] to hs[i]
@@ -242,6 +260,51 @@ class DocumentDetector {
             }
         }
         return out.sortedByDescending { it.second }.take(3).map { it.first }
+    }
+
+    /**
+     * Strana obrysu, ktorá nie je rovnobežná s protiľahlou (obrys „ušiel“ po kábli), sa nahradí
+     * najbližšou rovnou čiarou vo vnútri, ktorá s protiľahlou stranou rovnobežná je (rám tabule).
+     * Vráti upravený tvar alebo null, ak nie je čo dorovnať.
+     */
+    private fun refineSides(q: Quad, w: Double, h: Double): Quad? {
+        val c = q.corners.map { Point(it.x * w, it.y * h) }  // tl, tr, br, bl
+        // Strany ako dvojice bodov: hore, vpravo, dole, vľavo; protiľahlá strana má index (i + 2) % 4.
+        val sides = arrayOf(c[0] to c[1], c[1] to c[2], c[3] to c[2], c[0] to c[3])
+        fun angle(a: Point, b: Point) = Math.toDegrees(kotlin.math.atan2(b.y - a.y, b.x - a.x))
+        fun diff(a: Double, b: Double): Double { var d = kotlin.math.abs(a - b) % 180.0; if (d > 90) d = 180 - d; return d }
+        fun dist(p: Point, a: Point, b: Point): Double {
+            val l = kotlin.math.hypot(b.x - a.x, b.y - a.y).coerceAtLeast(1e-6)
+            return kotlin.math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / l
+        }
+        val poly = MatOfPoint2f(*c.toTypedArray())
+        var changed = false
+        val lines = sides.copyOf()
+        for (i in 0 until 4) {
+            val (a, b) = sides[i]
+            val (oa, ob) = sides[(i + 2) % 4]
+            val oppAngle = angle(oa, ob)
+            if (diff(angle(a, b), oppAngle) <= REFINE_MIN_SKEW) continue
+            val sideLen = kotlin.math.hypot(b.x - a.x, b.y - a.y)
+            val span = dist(Point((oa.x + ob.x) / 2, (oa.y + ob.y) / 2), a, b)
+            val horizontal = i == 0 || i == 2
+            val best = segments
+                .filter { if (horizontal) it.horizontal else it.vertical }
+                .filter { diff(Math.toDegrees(kotlin.math.atan2(it.y2 - it.y1, it.x2 - it.x1)), oppAngle) <= REFINE_PARALLEL }
+                .filter { it.len >= 0.4 * sideLen }
+                .filter { Imgproc.pointPolygonTest(poly, Point((it.x1 + it.x2) / 2, (it.y1 + it.y2) / 2), false) >= 0 }
+                .map { it to dist(Point((it.x1 + it.x2) / 2, (it.y1 + it.y2) / 2), a, b) }
+                .filter { it.second <= 0.25 * span }
+                .minByOrNull { it.second }?.first ?: continue
+            lines[i] = Point(best.x1, best.y1) to Point(best.x2, best.y2)
+            changed = true
+        }
+        poly.release()
+        if (!changed) return null
+        fun x(i: Int, j: Int) = intersect(lines[i].first, lines[i].second, lines[j].first, lines[j].second)
+        val pts = listOf(x(0, 3), x(0, 1), x(2, 1), x(2, 3))
+        if (pts.any { it == null }) return null
+        return Quad.fromUnordered(pts.map { Pt(it!!.x / w, it.y / h) })
     }
 
     /** Štvoruholník zo štyroch najdlhších hrán konvexného obalu (pozri [toQuads]). */
@@ -481,6 +544,10 @@ class DocumentDetector {
         /** Vzdialenosť vzoriek od strany v pixeloch analyzovaného obrazu. */
         const val CONTRAST_OFFSET = 6.0
         val EPSILONS = doubleArrayOf(0.02, 0.03, 0.04, 0.06)
+        /** Strana s väčšou odchýlkou od protiľahlej (°) sa skúsi dorovnať na čiaru rámu. */
+        const val REFINE_MIN_SKEW = 4.0
+        /** Najväčšia odchýlka čiary rámu od protiľahlej strany (°). */
+        const val REFINE_PARALLEL = 3.0
         /** Polovičná šírka pásu naprieč stranou, v ktorom sa hľadá línia hrany (px). */
         const val LINE_RANGE = 6
         /** Najmenší skok jasu medzi susednými pixelmi, ktorý sa počíta ako hrana. */
